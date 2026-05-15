@@ -517,3 +517,14 @@ class App(tk.Tk):
 
         self.current_frame = None
         self.switch_frame(HomeFrame)
+
+    def switch_frame(self, frame_class, *args):
+        """Destroys current frame and replaces it with a new one."""
+        if self.current_frame is not None:
+            self.current_frame.destroy()
+        self.current_frame = frame_class(self, *args)
+        self.current_frame.pack(fill="both", expand=True)
+
+if __name__ == "__main__":
+    app = App()
+    app.mainloop()
