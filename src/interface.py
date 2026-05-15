@@ -1,3 +1,4 @@
+import sys
 import tkinter as tk
 from tkinter import messagebox
 import json
@@ -38,6 +39,17 @@ FONT_TITLE = ("Arial", 18, "bold")
 FONT_SUBTITLE = ("Arial", 12, "bold")
 FONT_NORMAL = ("Arial", 11)
 FONT_GRID = ("Courier", 14, "bold")
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # Fallback to current working directory
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 def load_saved_games():
     if os.path.exists(SAVE_FILE):
@@ -488,15 +500,20 @@ class App(tk.Tk):
         self.geometry("900x650")
         self.configure(bg=BG_MAIN)
 
+        # --- Add Icon Logic Here ---
+        try:
+            if sys.platform.startswith('win'):
+                # Windows uses .ico
+                icon_path = resource_path(os.path.join("assets", "icon.ico"))
+                self.iconbitmap(icon_path)
+            else:
+                # Linux/macOS uses PhotoImage (.png)
+                icon_path = resource_path(os.path.join("assets", "icon.png"))
+                icon_img = tk.PhotoImage(file=icon_path)
+                self.wm_iconphoto(True, icon_img)
+        except Exception as e:
+            print(f"Warning: Could not load application icon: {e}")
+        # ---------------------------
+
         self.current_frame = None
         self.switch_frame(HomeFrame)
-
-    def switch_frame(self, frame_class, *args):
-        if self.current_frame is not None:
-            self.current_frame.destroy()
-        self.current_frame = frame_class(self, *args)
-        self.current_frame.pack(fill=tk.BOTH, expand=True)
-
-if __name__ == "__main__":
-    app = App()
-    app.mainloop()
