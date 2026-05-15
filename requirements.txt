@@ -1,0 +1,3 @@
+# Core application uses only Python Standard Library (tkinter, json, os, random)
+# Build dependencies:
+pyinstaller==6.11.0
