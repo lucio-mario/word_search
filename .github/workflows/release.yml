@@ -34,7 +34,7 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-- name: Build executable (Windows)
+      - name: Build executable (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           pyinstaller --noconsole --onefile --name WordSearch_Windows --icon assets/icon.ico --add-data "assets;assets" src/interface.py
