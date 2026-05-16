@@ -28,9 +28,22 @@ class WordSearchGenerator:
 
         while not placed and attempts < max_attempts:
             direction = random.choice(self.directions)
-            row_start = random.randint(0, self.size - 1)
-            col_start = random.randint(0, self.size - 1)
+            dr, dc = direction
 
+            # SMART BOUNDARIES: Calculate the maximum valid starting index for this specific direction
+            max_row = self.size - (len(word) if dr == 1 else 1)
+            max_col = self.size - (len(word) if dc == 1 else 1)
+
+            # Skip if mathematically impossible to fit (failsafe)
+            if max_row < 0 or max_col < 0:
+                attempts += 1
+                continue
+
+            # Pick random coordinates ONLY within the safe zone
+            row_start = random.randint(0, max_row)
+            col_start = random.randint(0, max_col)
+
+            # Now _can_place_word only needs to worry about letter collisions, not boundaries!
             if self._can_place_word(word, row_start, col_start, direction):
                 self._place_word(word, row_start, col_start, direction)
                 self.words.append(word)
