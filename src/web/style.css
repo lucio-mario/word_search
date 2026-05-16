@@ -109,6 +109,17 @@ button { border: none; padding: 8px 16px; color: var(--fg-text); cursor: pointer
     .frame.active {
         flex-direction: column;
     }
+
+    #play-frame .main-area {
+        order: 1;
+        padding-bottom: 0;
+    }
+
+    #play-frame .sidebar {
+        order: 2;
+        flex-grow: 1;
+    }
+
     .sidebar {
         width: 100%;
         height: auto;
