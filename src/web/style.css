@@ -106,6 +106,15 @@ button { border: none; padding: 8px 16px; color: var(--fg-text); cursor: pointer
 }
 
 @media (max-width: 768px) {
+    body {
+        height: auto;
+        overflow-y: auto;
+    }
+    .frame {
+        height: auto;
+        min-height: 100vh;
+    }
+
     .frame.active {
         flex-direction: column;
     }
