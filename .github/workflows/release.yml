@@ -37,12 +37,12 @@ jobs:
       - name: Build executable (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          pyinstaller --noconsole --onefile --name WordSearch_Windows --icon assets/icon.ico --add-data "assets;assets" src/interface.py
+          pyinstaller --noconsole --onefile --name WordSearch_Windows --icon assets/icon.ico --add-data "assets;assets" src/python/interface.py
 
       - name: Build executable (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          pyinstaller --noconsole --onefile --name WordSearch_Linux --icon assets/icon.png --add-data "assets:assets" src/interface.py
+          pyinstaller --noconsole --onefile --name WordSearch_Linux --icon assets/icon.png --add-data "assets:assets" src/python/interface.py
     
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2

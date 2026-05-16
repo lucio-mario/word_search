@@ -1,0 +1,77 @@
+:root {
+    --bg-main: #1e1e1e;
+    --bg-sidebar: #252526;
+    --fg-text: #ffffff;
+    --fg-subtext: #aaaaaa;
+    --entry-bg: #3c3c3c;
+    
+    --btn-primary: #1f5f99;
+    --btn-primary-act: #2a7bbd;
+    --btn-success: #2ebd59;
+    --btn-success-act: #36d968;
+    --btn-hint: #8e44ad;
+    --btn-warn: #d35400;
+    --btn-danger: #c0392b;
+
+    --cell-bg: #333333;
+    --cell-sel: #f1c40f;
+    --cell-found: #2ebd59;
+    --cell-hint: #9b59b6;
+    --cell-view: #e67e22;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+
+body { background-color: var(--bg-main); color: var(--fg-text); height: 100vh; overflow: hidden; }
+#app { width: 100%; height: 100%; }
+
+/* Layouts */
+.frame { display: none; width: 100%; height: 100%; }
+.frame.active { display: flex; }
+.container-center { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; }
+.sidebar { width: 300px; background-color: var(--bg-sidebar); padding: 20px; display: flex; flex-direction: column; height: 100%; }
+.main-area { flex-grow: 1; padding: 40px; display: flex; flex-direction: column; }
+.flex-center { align-items: center; justify-content: center; }
+
+/* Typography & Forms */
+h1 { font-size: 28px; margin-bottom: 40px; }
+h2 { font-size: 18px; margin-bottom: 20px; }
+.subtitle { color: var(--fg-subtext); font-weight: bold; margin-bottom: 5px; display: block;}
+.form-group { margin-bottom: 15px; text-align: left; }
+.form-group label { color: var(--fg-subtext); font-size: 11px; display: block; margin-bottom: 5px; }
+input { width: 100%; padding: 8px; background: var(--entry-bg); border: none; color: var(--fg-text); font-size: 11px; outline: none; }
+.input-row { display: flex; gap: 5px; }
+
+/* Lists */
+.listbox { background: var(--entry-bg); flex-grow: 1; overflow-y: auto; list-style: none; padding: 10px; }
+.listbox li { padding: 5px; font-size: 11px; cursor: default; }
+.listbox.select-list li { cursor: pointer; }
+.listbox.select-list li.selected { background: var(--btn-primary); }
+.listbox.no-bg { background: transparent; padding: 0; }
+.listbox.no-bg li { color: var(--fg-text); transition: color 0.3s;}
+.listbox.no-bg li.found { color: #555555; text-decoration: line-through; }
+
+/* Buttons */
+button { border: none; padding: 8px 16px; color: var(--fg-text); cursor: pointer; font-size: 11px; transition: background 0.2s;}
+.btn-large { width: 250px; padding: 12px; font-size: 12px; font-weight: bold; margin-bottom: 15px;}
+.btn-primary { background: var(--btn-primary); }
+.btn-primary:hover { background: var(--btn-primary-act); }
+.btn-success { background: var(--btn-success); }
+.btn-success:hover { background: var(--btn-success-act); }
+.btn-secondary { background: var(--entry-bg); color: var(--fg-subtext); width: 100%; padding: 10px;}
+.btn-secondary:hover { background: #444; }
+.btn-danger { background: var(--btn-danger); }
+.btn-hint { background: var(--btn-hint); width: 100%; margin-bottom: 10px; padding: 10px;}
+.btn-warn { background: var(--btn-warn); width: 100%; padding: 10px;}
+
+.bottom-actions { margin-top: auto; }
+.action-row { display: flex; justify-content: space-between; width: 100%; margin-top: 15px; }
+.hint-text { text-align: center; color: var(--fg-subtext); font-size: 10px; margin-bottom: 10px; }
+
+/* Grid */
+.grid { display: grid; gap: 4px; user-select: none; }
+.cell { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: var(--cell-bg); font-family: Courier, monospace; font-weight: bold; font-size: 14px; cursor: crosshair; transition: background 0.1s;}
+.cell.selected { background: var(--cell-sel); color: #000; }
+.cell.found { background: var(--cell-found); }
+.cell.hint { background: var(--cell-hint); }
+.cell.view { background: var(--cell-view); }

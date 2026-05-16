@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Search Application</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <div id="home-frame" class="frame active">
+            <div class="container-center">
+                <h1>Word Search Generator</h1>
+                <button class="btn-primary btn-large" onclick="app.switchFrame('create-frame')">Create New Game</button>
+                <button class="btn-success btn-large" onclick="app.switchFrame('select-frame')">Play Saved Game</button>
+            </div>
+        </div>
+
+        <div id="create-frame" class="frame">
+            <div class="sidebar">
+                <h2>Game Setup</h2>
+                <div class="form-group">
+                    <label>Game Name</label>
+                    <input type="text" id="create-name" placeholder="Enter game name">
+                </div>
+                <div class="form-group">
+                    <label>Grid Size</label>
+                    <input type="number" id="create-size" value="10" min="5" max="30">
+                </div>
+                <div class="form-group">
+                    <label>Add Word</label>
+                    <div class="input-row">
+                        <input type="text" id="create-word" placeholder="Type a word">
+                        <button class="btn-primary" onclick="createUI.addWord()">Add</button>
+                    </div>
+                </div>
+                <div class="bottom-actions">
+                    <button class="btn-success btn-large" onclick="createUI.generateAndSave()">Generate & Save</button>
+                    <button class="btn-secondary" onclick="app.switchFrame('home-frame')">Back to Home</button>
+                </div>
+            </div>
+            <div class="main-area">
+                <h2>Words to hide:</h2>
+                <ul id="create-word-list" class="listbox"></ul>
+            </div>
+        </div>
+
+        <div id="select-frame" class="frame">
+            <div class="container-center">
+                <h2>Select a Game</h2>
+                <ul id="select-game-list" class="listbox select-list"></ul>
+                <div class="action-row">
+                    <button class="btn-secondary" onclick="app.switchFrame('home-frame')">Back</button>
+                    <div>
+                        <button class="btn-danger" onclick="selectUI.deleteGame()">Delete</button>
+                        <button class="btn-success" onclick="selectUI.playGame()">Play</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="play-frame" class="frame">
+            <div class="sidebar">
+                <h2 id="play-game-name" class="wrap-text">Game Name</h2>
+                <label class="subtitle">Words to find:</label>
+                <ul id="play-word-list" class="listbox no-bg"></ul>
+                
+                <div class="action-group">
+                    <button class="btn-hint" id="btn-hint" onclick="playUI.triggerHint()">Show Hint</button>
+                    <button class="btn-warn" id="btn-view" onclick="playUI.toggleSolution()">Toggle Solution</button>
+                </div>
+
+                <div class="bottom-actions">
+                    <p class="hint-text">Click and drag to select</p>
+                    <button class="btn-secondary" onclick="app.switchFrame('home-frame')">Exit Game</button>
+                </div>
+            </div>
+            <div class="main-area flex-center">
+                <div id="grid-container" class="grid" onmouseleave="playUI.onDragRelease()"></div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
