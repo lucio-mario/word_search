@@ -285,14 +285,25 @@ const playUI = {
                 cell.dataset.r = r;
                 cell.dataset.c = c;
                 cell.id = `cell-${r}-${c}`;
-                
+
+                // Desktop Mouse Events
                 cell.onmousedown = (e) => playUI.onDragStart(r, c, e);
                 cell.onmouseenter = () => playUI.onDragMotion(r, c);
                 cell.onmouseup = () => playUI.onDragRelease();
-                
+
+                // Mobile Touch Events
+                cell.addEventListener('touchstart', (e) => {
+                    e.preventDefault(); // Impede o clique duplo de dar zoom
+                    playUI.onDragStart(r, c, { button: 0 }); // Simula clique esquerdo
+                }, { passive: false });
+
                 container.appendChild(cell);
             }
         }
+
+        // Adiciona um listener global para capturar o movimento do dedo pela tela
+        container.addEventListener('touchmove', playUI.onTouchMotion, { passive: false });
+        container.addEventListener('touchend', playUI.onDragRelease);
     },
 
     updateWordList: () => {
@@ -316,6 +327,23 @@ const playUI = {
     onDragMotion: (r, c) => {
         if (!playUI.isDragging || playUI.isViewMode) return;
         playUI.updateDragSelection(r, c);
+    },
+
+    onTouchMotion: (e) => {
+        e.preventDefault(); // Impede scroll
+        if (!playUI.isDragging || playUI.isViewMode) return;
+
+        // Pega as coordenadas X e Y do primeiro dedo tocando a tela
+        const touch = e.touches[0];
+        // Descobre qual elemento HTML está exatamente debaixo do dedo
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+
+        // Se o dedo estiver sobre uma célula da grade, extrai o R e C e atualiza
+        if (target && target.classList.contains('cell')) {
+            const r = parseInt(target.dataset.r);
+            const c = parseInt(target.dataset.c);
+            playUI.updateDragSelection(r, c);
+        }
     },
 
     onDragRelease: () => {

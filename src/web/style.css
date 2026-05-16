@@ -100,3 +100,24 @@ button { border: none; padding: 8px 16px; color: var(--fg-text); cursor: pointer
     width: 100px;
     padding: 10px;
 }
+
+.cell {
+    touch-action: none;
+}
+
+@media (max-width: 768px) {
+    .frame.active {
+        flex-direction: column;
+    }
+    .sidebar {
+        width: 100%;
+        height: auto;
+        padding: 10px;
+    }
+    .main-area {
+        padding: 10px;
+    }
+    .listbox {
+        max-height: 150px;
+    }
+}
