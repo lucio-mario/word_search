@@ -75,3 +75,28 @@ button { border: none; padding: 8px 16px; color: var(--fg-text); cursor: pointer
 .cell.found { background: var(--cell-found); }
 .cell.hint { background: var(--cell-hint); }
 .cell.view { background: var(--cell-view); }
+
+/* --- Select Game Layout Fixes --- */
+.select-container {
+    width: 450px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.select-container .listbox {
+    height: 220px;
+    flex-grow: 0;
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+.right-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-fixed, .action-row .btn-secondary {
+    width: 100px;
+    padding: 10px;
+}

@@ -47,13 +47,15 @@
 
         <div id="select-frame" class="frame">
             <div class="container-center">
-                <h2>Select a Game</h2>
-                <ul id="select-game-list" class="listbox select-list"></ul>
-                <div class="action-row">
-                    <button class="btn-secondary" onclick="app.switchFrame('home-frame')">Back</button>
-                    <div>
-                        <button class="btn-danger" onclick="selectUI.deleteGame()">Delete</button>
-                        <button class="btn-success" onclick="selectUI.playGame()">Play</button>
+                <div class="select-container">
+                    <h2>Select a Game</h2>
+                    <ul id="select-game-list" class="listbox select-list"></ul>
+                    <div class="action-row">
+                        <button class="btn-secondary btn-fixed" onclick="app.switchFrame('home-frame')">Back</button>
+                        <div class="right-actions">
+                            <button class="btn-danger btn-fixed" onclick="selectUI.deleteGame()">Delete</button>
+                            <button class="btn-success btn-fixed" onclick="selectUI.playGame()">Play</button>
+                        </div>
                     </div>
                 </div>
             </div>
