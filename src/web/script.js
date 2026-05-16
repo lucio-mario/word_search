@@ -62,10 +62,41 @@ class WordSearchGenerator {
 }
 
 // --- App State & Data Management ---
+const defaultGames = {
+    "Biofísica Clínica": {
+        "size": 12,
+        "grid": [
+            ["F", "M", "C", "U", "P", "R", "O", "T", "E", "Ç", "Ã", "O"],
+            ["F", "A", "Y", "É", "Z", "J", "O", "U", "Z", "Z", "C", "C"],
+            ["M", "J", "C", "B", "R", "M", "U", "X", "M", "R", "M", "M"],
+            ["I", "M", "U", "E", "Z", "E", "Á", "B", "E", "A", "G", "E"],
+            ["L", "K", "D", "E", "L", "Z", "B", "S", "T", "D", "X", "T"],
+            ["Í", "X", "H", "A", "O", "E", "A", "R", "C", "I", "Y", "Á"],
+            ["M", "C", "N", "I", "H", "I", "R", "V", "O", "A", "J", "S"],
+            ["E", "Â", "J", "P", "E", "L", "E", "A", "Q", "Ç", "R", "T"],
+            ["T", "N", "P", "Z", "G", "P", "V", "U", "D", "Ã", "U", "A"],
+            ["R", "C", "S", "É", "S", "I", "L", "V", "Q", "O", "G", "S"],
+            ["O", "E", "N", "F", "A", "X", "X", "H", "W", "M", "R", "E"],
+            ["T", "R", "T", "K", "A", "F", "D", "R", "J", "Q", "L", "F"]
+        ],
+        "words": [
+            "CÂNCER", "RADIAÇÃO", "PROTEÇÃO", "PELE", "ACELERADOR", "MÁSCARA", "SÉSIL", "MILÍMETRO", "CÉREBRO", "METÁSTASE"
+        ]
+    }
+};
+
 const Storage = {
+    init: () => {
+        if (!localStorage.getItem('wordSearchGames')) {
+            localStorage.setItem('wordSearchGames', JSON.stringify(defaultGames));
+        }
+    },
     load: () => JSON.parse(localStorage.getItem('wordSearchGames') || '{}'),
     save: (data) => localStorage.setItem('wordSearchGames', JSON.stringify(data))
 };
+
+// Initialize default games on first load
+Storage.init();
 
 const app = {
     switchFrame: (frameId) => {
