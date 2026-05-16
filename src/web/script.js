@@ -62,6 +62,7 @@ class WordSearchGenerator {
 }
 
 // --- App State & Data Management ---
+// --- App State & Data Management ---
 const defaultGames = {
     "Biofísica Clínica": {
         "size": 12,
@@ -86,17 +87,20 @@ const defaultGames = {
 };
 
 const Storage = {
-    init: () => {
-        if (!localStorage.getItem('wordSearchGames')) {
-            localStorage.setItem('wordSearchGames', JSON.stringify(defaultGames));
-        }
+    load: () => {
+        // Carrega os jogos do usuário da memória
+        const userGames = JSON.parse(localStorage.getItem('wordSearchGames') || '{}');
+        // Retorna uma união dos jogos padrão (imutáveis) com os jogos do usuário
+        return { ...defaultGames, ...userGames };
     },
-    load: () => JSON.parse(localStorage.getItem('wordSearchGames') || '{}'),
-    save: (data) => localStorage.setItem('wordSearchGames', JSON.stringify(data))
+    save: (data) => {
+        // Copia os dados para não alterar o original
+        const dataToSave = { ...data };
+        // Remove os jogos padrão da cópia antes de salvar na memória local
+        Object.keys(defaultGames).forEach(name => delete dataToSave[name]);
+        localStorage.setItem('wordSearchGames', JSON.stringify(dataToSave));
+    }
 };
-
-// Initialize default games on first load
-Storage.init();
 
 const app = {
     switchFrame: (frameId) => {
@@ -193,6 +197,14 @@ const selectUI = {
     },
     deleteGame: () => {
         if (!selectUI.selectedGame) return alert("Select a game to delete.");
+
+        // --- NOVA TRAVA DE SEGURANÇA ---
+        if (defaultGames[selectUI.selectedGame]) {
+            alert("You cannot delete the built-in default games.");
+            return;
+        }
+        // -------------------------------
+
         if (confirm(`Delete '${selectUI.selectedGame}'?`)) {
             const games = Storage.load();
             delete games[selectUI.selectedGame];
