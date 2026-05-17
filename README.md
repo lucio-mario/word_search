@@ -2,7 +2,7 @@
 
 The **Word Search Generator** is a cross-platform application that allows users to create custom word search puzzles, save them, and play them interactively with drag-and-drop mechanics, visual hints, and a sleek dark-mode interface.
 
-It is available as a **Desktop Application** (built in Python/`tkinter`) and as a **Web Game** (built in `HTML`/`JS`).
+It is available as a **Desktop Application** (built in Python/`tkinter`) and as a **Web Game** (built in `HTML`/`JS` with WebRTC P2P Multiplayer).
 
 ![Interface Photo](assets/interface.png)
 
@@ -22,17 +22,18 @@ It is available as a **Desktop Application** (built in Python/`tkinter`) and as 
 
 ## About the Project
 
-This tool was designed to be lightweight and dependency-free. The core logic handles smart grid generation and game state, running natively on Desktop via Python or directly in the Browser via Javascript.
+This tool was designed to be lightweight and efficient. The core logic handles smart grid generation and game state, running natively on Desktop via Python or directly in the Browser via JavaScript. The Web version extends this with a serverless multiplayer architecture.
 
 ### Features
 
-* **Interactive Gameplay:** Click and drag across the grid to select words.
+* **Interactive Gameplay:** Click and drag across the grid to select words natively.
 * **Smart Grid Generation:** Automatically places words horizontally, vertically, and diagonally (left-to-right) with random intersections.
-* **Game Management:** Save custom grids and word lists locally (via JSON or LocalStorage). Play them later from the main menu.
-* **Assistive Tools:**
-    * **Show Hint:** Flashes the location of a missing word in purple.
-    * **Toggle Solution:** Temporarily reveals all hidden words in orange.
-* **Modern UI:** Custom flat-design dark mode.
+* **Peer-to-Peer Multiplayer (Web):** Play with friends globally in real-time. The game uses WebRTC to connect browsers directly without a central game server.
+* **Lobby & Live Chat:** Setup room rules, chat with players before the match starts, and use the floating in-game chat while playing.
+* **Host Migration & Late Join:** If the room host disconnects, the longest-playing client automatically takes over as the new host, preserving the room and players' scores. Players can also join matches already in progress.
+* **Mobile Optimized:** Full touch support with automatic grid scaling and pinch-to-zoom capabilities for smaller screens.
+* **Assistive Tools:** Use "Show Hint" to flash a missing word's location, or "Toggle Solution" to temporarily reveal all hidden words.
+* **Modern UI:** Custom flat-design dark mode tailored for both desktop and mobile views.
 
 ([back to top](#table-of-contents))
 
@@ -87,21 +88,26 @@ pyinstaller --noconsole --onefile --name WordSearch --icon assets/icon.png --add
 
 ## Usage
 
-1. Launch the application or the Web page.
-2. Create New Game:
-* Enter a Game Name and grid size.
-* Type words and press Enter (or click Add).
-* Click Generate & Save.
-3. Play Saved Game:
-* Select a previously created game from the list.
-* Click and drag across the letters on the grid to form words.
-* Use "Show Hint" or "Toggle Solution" if you get stuck.
+### Singleplayer Mode:
+
+1. Launch the application and select Singleplayer.
+2. Create New Game: Enter a name, set the grid size, add words, and click Generate.
+3. Play Saved Game: Select a previously created game from the list to play locally.
+
+### Multiplayer Mode (Web Only):
+
+1. Select Multiplayer from the main menu.
+2. Create Room (Host): Set a username, configure room visibility (Public/Private with password), and define max players. Wait in the lobby while configuring the grid size and words.
+3. Join Room: Enter your username and the Host's 4-letter Room ID to connect.
+4. The Host manages the match lifecycle. The player who finds the most words wins the round and earns a star (★) on the lobby scoreboard.
 
 ([back to top](#table-of-contents))
 
 ## Tech Stack
 
 * **Language**: `Python` & `JavaScript`
+
+* Network/Multiplayer: `WebRTC` (via `Peer JS`)
 
 * **GUI Framework**: `tkinter` (Standard Library)
 
@@ -124,3 +130,4 @@ Developed by **Lúcio Mário Barbosa da Silva Filho**
 GitHub: [`@lucio-mario`](https://github.com/lucio-mario)
 
 ([back to top](#table-of-contents))
+
