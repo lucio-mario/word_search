@@ -87,6 +87,73 @@ button { border: none; padding: 8px 16px; color: var(--fg-text); cursor: pointer
 .player-score-item { display: flex; justify-content: space-between; font-weight: bold; padding: 8px !important;}
 .player-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px;}
 
+/* Chat Component */
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-sidebar);
+    border: 1px solid var(--entry-bg);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.chat-header {
+    background: var(--entry-bg);
+    padding: 8px;
+    font-weight: bold;
+    font-size: 12px;
+    text-align: center;
+    border-bottom: 1px solid var(--bg-main);
+}
+.chat-messages {
+    flex-grow: 1;
+    padding: 10px;
+    overflow-y: auto;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 200px;
+}
+.chat-input-area {
+    display: flex;
+    padding: 5px;
+    background: var(--entry-bg);
+}
+.chat-input-area input {
+    flex-grow: 1;
+    margin-right: 5px;
+}
+.chat-msg {
+    word-break: break-word;
+}
+.chat-msg strong {
+    margin-right: 3px;
+}
+
+/* In-Game Chat Specifics */
+.ingame-chat {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 250px;
+    max-height: 300px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    z-index: 100;
+}
+.ingame-chat .chat-header {
+    cursor: pointer;
+    background: var(--btn-primary);
+}
+.ingame-chat .chat-header:hover {
+    background: var(--btn-primary-act);
+}
+.ingame-chat .chat-body {
+    display: flex;
+    flex-direction: column;
+    height: 200px;
+}
+
 @media (max-width: 768px) {
     body { height: auto; overflow-y: auto; }
     .frame { height: auto; min-height: 100vh; }
@@ -97,4 +164,6 @@ button { border: none; padding: 8px 16px; color: var(--fg-text); cursor: pointer
     .main-area { padding: 10px; }
     .listbox { max-height: 150px; }
     .select-container { width: 100%; }
+    #lobby-frame .main-area { flex-direction: column; }
+    .ingame-chat { bottom: 0; right: 0; width: 100%; border-radius: 0; position: fixed;}
 }

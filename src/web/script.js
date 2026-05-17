@@ -111,7 +111,6 @@ const app = {
     },
     exitApp: () => {
         if (confirm("Close the browser window?")) {
-            // Se for fechar a aba, já faz o leaveRoom para limpar o peerjs server
             if (app.isMultiplayer) mp.leaveRoom();
             window.close();
             document.getElementById('app').innerHTML = '<div class="container-center"><h1>Game Closed</h1><p class="subtitle">You can close this tab now.</p></div>';
@@ -139,9 +138,8 @@ const mp = {
     players: {},
     cellColors: {},
     hostConn: null,
-
-    // Lista ordenada de IDs para decidir quem é o próximo host
     peerOrder: [],
+    chatHistory: [],
 
     cleanup: () => {
         if (mp.peer) mp.peer.destroy();
@@ -153,6 +151,8 @@ const mp = {
         mp.lobbyWords = [];
         mp.lobbyGridSize = 12;
         mp.peerOrder = [];
+        mp.chatHistory = [];
+        mp.renderChat();
     },
 
     leaveRoom: () => {
@@ -175,7 +175,6 @@ const mp = {
         }
     },
 
-    // Finaliza a partida e distribui os pontos de vitória (Wins)
     endGameHost: () => {
         if (!mp.isHost) return;
         if (confirm("End the match and return everyone to the lobby?")) {
@@ -201,7 +200,6 @@ const mp = {
         mp.updateLobbyUI();
     },
 
-    // O Host original cria a sala do zero
     createRoomHost: (hostName, isPrivate, password, maxPlayers) => {
         const btn = document.querySelector('#mp-create-frame .btn-success');
 
@@ -236,6 +234,7 @@ const mp = {
 
             app.switchFrame('lobby-frame');
             mp.updateLobbyUI();
+            mp.appendChatSysMsg("Room created.");
         });
 
         mp.peer.on('error', (err) => {
@@ -247,7 +246,6 @@ const mp = {
         mp.peer.on('connection', (conn) => mp.setupHostConnection(conn));
     },
 
-    // A lógica de gerenciar uma nova conexão com o Host
     setupHostConnection: (conn) => {
         conn.on('open', () => {
             if (Object.keys(mp.players).length >= mp.maxPlayers) {
@@ -264,22 +262,20 @@ const mp = {
                 }
             }
 
-            // Client Aceito. Adiciona à lista de Herança de Host
             mp.connections.push(conn);
             mp.peerOrder.push(conn.peer);
 
-            // Resgata vitórias passadas do jogador se ele for novo na sala (sempre 0 ao entrar)
             const pCount = Object.keys(mp.players).length;
             const color = PLAYER_COLORS[pCount % PLAYER_COLORS.length];
             const pName = conn.metadata?.playerName || `Player ${pCount + 1}`;
-
-            // Se o client reconectou (Migração), nós preservamos o "wins" que ele mandou. Senão, 0.
             const pWins = conn.metadata?.wins || 0;
 
             mp.players[conn.peer] = { name: pName, color: color, score: 0, wins: pWins };
 
-            conn.send({ type: 'AUTH_ACCEPTED', roomId: mp.roomId, maxPlayers: mp.maxPlayers, isPrivate: mp.isPrivate, password: mp.password });
+            conn.send({ type: 'AUTH_ACCEPTED', roomId: mp.roomId, maxPlayers: mp.maxPlayers, isPrivate: mp.isPrivate, password: mp.password, chatHistory: mp.chatHistory });
             mp.syncLobbySettings();
+
+            mp.appendChatSysMsg(`${pName} joined the room.`);
 
             if (app.isMultiplayer) {
                 conn.send({
@@ -297,6 +293,7 @@ const mp = {
             mp.connections = mp.connections.filter(c => c.peer !== conn.peer);
             mp.peerOrder = mp.peerOrder.filter(id => id !== conn.peer);
             if(mp.players[conn.peer]) {
+                mp.appendChatSysMsg(`${mp.players[conn.peer].name} left.`);
                 delete mp.players[conn.peer];
                 mp.syncLobbySettings();
             }
@@ -323,7 +320,6 @@ const mp = {
         mp.peer = new Peer();
         mp.peer.on('open', (id) => {
             mp.myId = id;
-            // O Client envia seu nome e quantas vitórias já tinha (importante para Migração)
             mp.hostConn = mp.peer.connect(`ws-game-${mp.roomId.toLowerCase()}`, {
                 metadata: { password: pwd, playerName: mp.myCurrentName, wins: previousWins }
             });
@@ -332,7 +328,7 @@ const mp = {
 
             mp.hostConn.on('close', () => {
                 if (mp.peerOrder.length > 1) {
-                    mp.handleHostMigration(); // Tenta migrar o Host se ele cair
+                    mp.handleHostMigration();
                 } else {
                     alert("Disconnected from Host.");
                     mp.leaveRoom();
@@ -351,16 +347,11 @@ const mp = {
         });
     },
 
-    // --- LÓGICA DE MIGRAÇÃO DE HOST ---
     handleHostMigration: () => {
-        // Remove o Host antigo (que estava no index 0)
         mp.peerOrder.shift();
         const newHostId = mp.peerOrder[0];
 
-        // Se EU for o próximo da fila, assumo o papel do Host
         if (mp.myId === newHostId) {
-
-            // Salva o estado atual da sala
             const savedState = {
                 roomId: mp.roomId,
                 isPriv: mp.isPrivate,
@@ -369,12 +360,12 @@ const mp = {
                 words: mp.lobbyWords,
                 size: mp.lobbyGridSize,
                 myName: mp.myCurrentName,
-                myWins: mp.players[mp.myId]?.wins || 0
+                myWins: mp.players[mp.myId]?.wins || 0,
+                chat: mp.chatHistory
             };
 
             mp.cleanup();
 
-            // Aguarda 1.5s para o servidor do PeerJS liberar a tag da sala antiga
             setTimeout(() => {
                 mp.isHost = true;
                 mp.isPrivate = savedState.isPriv;
@@ -383,12 +374,12 @@ const mp = {
                 mp.roomId = savedState.roomId;
                 mp.lobbyWords = savedState.words;
                 mp.lobbyGridSize = savedState.size;
+                mp.chatHistory = savedState.chat;
 
                 mp.peer = new Peer(`ws-game-${mp.roomId.toLowerCase()}`);
 
                 mp.peer.on('open', (id) => {
                     mp.myId = id;
-                    // Eu me adiciono como Host mantendo minhas vitórias
                     mp.players[id] = { name: savedState.myName + ' (New Host)', color: PLAYER_COLORS[0], score: 0, wins: savedState.myWins };
                     mp.peerOrder = [id];
 
@@ -401,10 +392,11 @@ const mp = {
                     document.getElementById('host-settings').style.display = 'block';
                     document.getElementById('client-settings').style.display = 'none';
 
-                    app.isMultiplayer = false; // Força voltar ao lobby
+                    app.isMultiplayer = false;
                     app.switchFrame('lobby-frame');
                     mp.updateLobbyUI();
-                    alert("The previous host left. YOU are the new Host!");
+                    mp.renderChat();
+                    mp.appendChatSysMsg("Host migrated. YOU are the new Host.");
                 });
 
                 mp.peer.on('connection', (conn) => mp.setupHostConnection(conn));
@@ -412,7 +404,6 @@ const mp = {
             }, 1500);
 
         } else {
-            // Se eu NÃO sou o próximo, aguardo 3 segundos e tento reconectar na mesma sala silenciosamente
             const rId = mp.roomId;
             const rPwd = mp.password;
             const myWins = mp.players[mp.myId]?.wins || 0;
@@ -425,7 +416,6 @@ const mp = {
             }, 3000);
         }
     },
-    // ------------------------------------
 
     addLobbyWord: () => {
         const input = document.getElementById('lobby-new-word');
@@ -464,6 +454,84 @@ const mp = {
         mp.connections.forEach(conn => conn.send(data));
     },
 
+    // --- CHAT LOGIC ---
+    sendChat: (source) => {
+        const inputId = source === 'lobby' ? 'lobby-chat-input' : 'ingame-chat-input';
+        const input = document.getElementById(inputId);
+        const msg = input.value.trim();
+        if (!msg) return;
+
+        input.value = '';
+        const chatObj = { type: 'CHAT_MSG', senderId: mp.myId, text: msg };
+
+        if (mp.isHost) {
+            mp.handleChat(chatObj);
+        } else {
+            mp.hostConn.send(chatObj);
+        }
+    },
+
+    handleChat: (chatObj) => {
+        // O Host recebe a mensagem, registra no histórico e repassa pra todos
+        const pName = mp.players[chatObj.senderId]?.name || "Unknown";
+        const pColor = mp.players[chatObj.senderId]?.color || "#FFF";
+
+        const enrichedMsg = { type: 'CHAT_BROADCAST', name: pName, color: pColor, text: chatObj.text };
+        mp.chatHistory.push(enrichedMsg);
+
+        mp.broadcast(enrichedMsg);
+        mp.appendChatHTML(enrichedMsg);
+    },
+
+    appendChatSysMsg: (text) => {
+        const sysMsg = { type: 'CHAT_BROADCAST', name: "System", color: "var(--fg-subtext)", text: text };
+        mp.chatHistory.push(sysMsg);
+        mp.broadcast(sysMsg);
+        mp.appendChatHTML(sysMsg);
+    },
+
+    appendChatHTML: (msgObj) => {
+        // Cria elemento DOM da mensagem
+        const el = document.createElement('div');
+        el.className = 'chat-msg';
+        el.innerHTML = `<strong style="color: ${msgObj.color}">${msgObj.name}:</strong> ${msgObj.text}`;
+
+        // Adiciona nas duas views de chat (Lobby e Jogo)
+        const lobbyBox = document.getElementById('lobby-chat-messages');
+        const gameBox = document.getElementById('ingame-chat-messages');
+
+        const elClone = el.cloneNode(true);
+        if(lobbyBox) { lobbyBox.appendChild(el); lobbyBox.scrollTop = lobbyBox.scrollHeight; }
+        if(gameBox) { gameBox.appendChild(elClone); gameBox.scrollTop = gameBox.scrollHeight; }
+
+        // Alerta visual In-Game se o painel estiver fechado
+        const chatBody = document.getElementById('ingame-chat-body');
+        const notif = document.getElementById('chat-notif');
+        if (app.isMultiplayer && chatBody && chatBody.style.display === 'none') {
+            if (notif) notif.style.display = 'inline';
+        }
+    },
+
+    renderChat: () => {
+        const lobbyBox = document.getElementById('lobby-chat-messages');
+        const gameBox = document.getElementById('ingame-chat-messages');
+        if(lobbyBox) lobbyBox.innerHTML = '';
+        if(gameBox) gameBox.innerHTML = '';
+        mp.chatHistory.forEach(msg => mp.appendChatHTML(msg));
+    },
+
+    toggleChat: () => {
+        const body = document.getElementById('ingame-chat-body');
+        const notif = document.getElementById('chat-notif');
+        if (body.style.display === 'none') {
+            body.style.display = 'flex';
+            if (notif) notif.style.display = 'none';
+        } else {
+            body.style.display = 'none';
+        }
+    },
+    // ------------------
+
     startGameHost: () => {
         if(mp.lobbyWords.length === 0) return alert("Add at least one word to start!");
 
@@ -492,6 +560,9 @@ const mp = {
                 mp.syncLobbySettings();
             }
         }
+        else if (data.type === 'CHAT_MSG') {
+            mp.handleChat(data);
+        }
         else if (data.type === 'WORD_FOUND_REQ') {
             if (playUI.wordsToFind.includes(data.word)) {
                 mp.players[senderId].score += 1;
@@ -515,6 +586,12 @@ const mp = {
             mp.password = data.password;
             mp.maxPlayers = data.maxPlayers;
 
+            // Baixa histórico de chat ao conectar
+            if(data.chatHistory) {
+                mp.chatHistory = data.chatHistory;
+                mp.renderChat();
+            }
+
             document.getElementById('lobby-info-id').textContent = data.roomId;
             document.getElementById('lobby-info-max').textContent = data.maxPlayers;
             document.getElementById('lobby-info-pwd-wrap').style.display = data.isPrivate ? 'block' : 'none';
@@ -524,10 +601,13 @@ const mp = {
             document.getElementById('host-settings').style.display = 'none';
             document.getElementById('client-settings').style.display = 'block';
 
-            // Popula o nome que a pessoa digitou na tela de Join
             document.getElementById('lobby-player-name').value = mp.myCurrentName;
 
             app.switchFrame('lobby-frame');
+
+        } else if (data.type === 'CHAT_BROADCAST') {
+            mp.chatHistory.push(data);
+            mp.appendChatHTML(data);
 
         } else if (data.type === 'LOBBY_UPDATE') {
             mp.players = data.players;
@@ -562,7 +642,7 @@ const mp = {
 
         } else if (data.type === 'GAME_OVER') {
             app.isMultiplayer = false;
-            mp.players = data.players; // Atualiza com os wins calculados pelo host
+            mp.players = data.players;
             app.switchFrame('lobby-frame');
             mp.updateLobbyUI();
         }
@@ -615,6 +695,13 @@ const mp = {
         }
     }
 };
+
+// Enter keys for chat
+document.getElementById('lobby-chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.sendChat('lobby'); });
+document.getElementById('ingame-chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.sendChat('ingame'); });
+// Existing Enters
+document.getElementById('create-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') createUI.addWord(); });
+document.getElementById('lobby-new-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.addLobbyWord(); });
 
 // --- Singleplayer Create Logic ---
 const createUI = {
@@ -696,9 +783,6 @@ const mpCreateUI = {
     }
 };
 
-document.getElementById('create-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') createUI.addWord(); });
-document.getElementById('lobby-new-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.addLobbyWord(); });
-
 // --- Select Game Logic (Singleplayer) ---
 const selectUI = {
     selectedGame: null,
@@ -762,12 +846,16 @@ const playUI = {
             document.getElementById('scoreboard-container').style.display = 'block';
             document.getElementById('btn-end-mp').style.display = mp.isHost ? 'block' : 'none';
             document.getElementById('btn-leave-mp').style.display = 'block';
+            document.getElementById('ingame-chat-container').style.display = 'flex';
+            document.getElementById('ingame-chat-body').style.display = 'none'; // Default hidden in game
+            document.getElementById('chat-notif').style.display = 'none';
             mp.updateLobbyUI();
         } else {
             document.getElementById('sp-actions').style.display = 'block';
             document.getElementById('scoreboard-container').style.display = 'none';
             document.getElementById('btn-end-mp').style.display = 'none';
             document.getElementById('btn-leave-mp').style.display = 'none';
+            document.getElementById('ingame-chat-container').style.display = 'none';
         }
 
         playUI.wordCoordsMap = playUI._mapAllWords();
@@ -973,7 +1061,7 @@ const playUI = {
                 } else if (!app.isMultiplayer) {
                     alert("Congratulations! You found all the words!");
                 }
-            }, 1000); // 1 segundo de folga para os jogadores verem a última palavra
+            }, 1000);
         }
     },
 
