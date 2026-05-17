@@ -17,8 +17,15 @@ class WordSearchGenerator {
 
         while (!placed && attempts < maxAttempts) {
             let dir = this.directions[Math.floor(Math.random() * this.directions.length)];
-            let rowStart = Math.floor(Math.random() * this.size);
-            let colStart = Math.floor(Math.random() * this.size);
+            let [dr, dc] = dir;
+
+            let maxRow = this.size - (dr === 1 ? word.length : 1);
+            let maxCol = this.size - (dc === 1 ? word.length : 1);
+
+            if (maxRow < 0 || maxCol < 0) { attempts++; continue; }
+
+            let rowStart = Math.floor(Math.random() * (maxRow + 1));
+            let colStart = Math.floor(Math.random() * (maxCol + 1));
 
             if (this._canPlaceWord(word, rowStart, colStart, dir)) {
                 this._placeWord(word, rowStart, colStart, dir);
@@ -33,11 +40,9 @@ class WordSearchGenerator {
     _canPlaceWord(word, row, col, dir) {
         let [dr, dc] = dir;
         for (let i = 0; i < word.length; i++) {
-            let r = row + i * dr;
-            let c = col + i * dc;
+            let r = row + i * dr, c = col + i * dc;
             if (r < 0 || r >= this.size || c < 0 || c >= this.size) return false;
-            let currentChar = this.grid[r][c];
-            if (currentChar !== '-' && currentChar !== word[i]) return false;
+            if (this.grid[r][c] !== '-' && this.grid[r][c] !== word[i]) return false;
         }
         return true;
     }
@@ -62,7 +67,6 @@ class WordSearchGenerator {
 }
 
 // --- App State & Data Management ---
-// --- App State & Data Management ---
 const defaultGames = {
     "Biofísica Clínica": {
         "size": 12,
@@ -80,38 +84,226 @@ const defaultGames = {
             ["O", "E", "N", "F", "A", "X", "X", "H", "W", "M", "R", "E"],
             ["T", "R", "T", "K", "A", "F", "D", "R", "J", "Q", "L", "F"]
         ],
-        "words": [
-            "CÂNCER", "RADIAÇÃO", "PROTEÇÃO", "PELE", "ACELERADOR", "MÁSCARA", "SÉSIL", "MILÍMETRO", "CÉREBRO", "METÁSTASE"
-        ]
+        "words": ["CÂNCER", "RADIAÇÃO", "PROTEÇÃO", "PELE", "ACELERADOR", "MÁSCARA", "SÉSIL", "MILÍMETRO", "CÉREBRO", "METÁSTASE"]
     }
 };
 
 const Storage = {
     load: () => {
-        // Carrega os jogos do usuário da memória
         const userGames = JSON.parse(localStorage.getItem('wordSearchGames') || '{}');
-        // Retorna uma união dos jogos padrão (imutáveis) com os jogos do usuário
         return { ...defaultGames, ...userGames };
     },
     save: (data) => {
-        // Copia os dados para não alterar o original
         const dataToSave = { ...data };
-        // Remove os jogos padrão da cópia antes de salvar na memória local
         Object.keys(defaultGames).forEach(name => delete dataToSave[name]);
         localStorage.setItem('wordSearchGames', JSON.stringify(dataToSave));
     }
 };
 
 const app = {
+    isMultiplayer: false,
     switchFrame: (frameId) => {
         document.querySelectorAll('.frame').forEach(f => f.classList.remove('active'));
         document.getElementById(frameId).classList.add('active');
         if (frameId === 'select-frame') selectUI.refreshList();
         if (frameId === 'create-frame') createUI.reset();
+        if (frameId === 'mp-create-frame') mpCreateUI.reset();
+    },
+    exitApp: () => {
+        if (confirm("Are you sure you want to exit the game?")) {
+            window.close();
+            document.getElementById('app').innerHTML = '<div class="container-center"><h1>Thanks for playing!</h1><p class="subtitle">You can close this tab now.</p></div>';
+        }
     }
 };
 
-// --- Create Game Logic ---
+// --- Multiplayer Network Logic (WebRTC via PeerJS) ---
+const PLAYER_COLORS = ['#e74c3c', '#3498db', '#f1c40f', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e84393'];
+
+const mp = {
+    peer: null,
+    isHost: false,
+    roomId: '',
+    myId: null,
+    isPrivate: false,
+    password: '',
+
+    // Host state
+    connections: [],
+    players: {},
+
+    // Client state
+    hostConn: null,
+
+    cleanup: () => {
+        if (mp.peer) mp.peer.destroy();
+        mp.peer = null;
+        mp.connections = [];
+        mp.hostConn = null;
+        mp.players = {};
+    },
+
+    leaveRoom: () => {
+        mp.cleanup();
+        app.isMultiplayer = false;
+        app.switchFrame('mp-menu-frame');
+    },
+
+    createRoomHost: (gameData) => {
+        mp.cleanup();
+        mp.isHost = true;
+        mp.roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+        mp.peer = new Peer(`ws-game-${mp.roomId}`);
+
+        mp.peer.on('open', (id) => {
+            mp.myId = id;
+            mp.players[id] = { name: 'Host', color: PLAYER_COLORS[0], score: 0 };
+
+            document.getElementById('lobby-room-id').textContent = mp.roomId;
+            document.getElementById('btn-start-mp').style.display = 'block';
+            app.switchFrame('lobby-frame');
+            mp.updateLobbyUI();
+
+            mp.pendingGameData = gameData;
+        });
+
+        mp.peer.on('connection', (conn) => {
+            conn.on('open', () => {
+                // Auth Check for Private Rooms
+                if (mp.isPrivate) {
+                    if (!conn.metadata || conn.metadata.password !== mp.password) {
+                        conn.send({ type: 'AUTH_REJECTED' });
+                        setTimeout(() => conn.close(), 500);
+                        return;
+                    }
+                }
+
+                // Connection Accepted
+                mp.connections.push(conn);
+                conn.send({ type: 'AUTH_ACCEPTED' });
+
+                const pCount = Object.keys(mp.players).length;
+                const color = PLAYER_COLORS[pCount % PLAYER_COLORS.length];
+                mp.players[conn.peer] = { name: `Player ${pCount + 1}`, color: color, score: 0 };
+
+                mp.broadcast({ type: 'LOBBY_UPDATE', players: mp.players });
+                mp.updateLobbyUI();
+            });
+
+            conn.on('data', (data) => mp.handleDataFromClient(data, conn.peer));
+
+            conn.on('close', () => {
+                mp.connections = mp.connections.filter(c => c.peer !== conn.peer);
+                if(mp.players[conn.peer]) {
+                    mp.players[conn.peer].name += " (Disconnected)";
+                    mp.broadcast({ type: 'LOBBY_UPDATE', players: mp.players });
+                    mp.updateLobbyUI();
+                }
+            });
+        });
+    },
+
+    joinRoom: () => {
+        const inputId = document.getElementById('join-room-id').value.trim().toUpperCase();
+        const pwd = document.getElementById('join-room-pwd').value.trim();
+        if (!inputId) return alert("Enter a Room ID");
+
+        mp.cleanup();
+        mp.isHost = false;
+        mp.roomId = inputId;
+
+        mp.peer = new Peer();
+        mp.peer.on('open', (id) => {
+            mp.myId = id;
+            // Envia a senha anexada aos metadados da conexão
+            mp.hostConn = mp.peer.connect(`ws-game-${mp.roomId}`, { metadata: { password: pwd } });
+
+            mp.hostConn.on('data', (data) => mp.handleDataFromHost(data));
+            mp.hostConn.on('close', () => {
+                alert("Disconnected from Host.");
+                mp.leaveRoom();
+            });
+        });
+
+        mp.peer.on('error', (err) => {
+            alert(`Connection error: ${err.type}`);
+            mp.leaveRoom();
+        });
+    },
+
+    broadcast: (data) => {
+        mp.connections.forEach(conn => conn.send(data));
+    },
+
+    startGameHost: () => {
+        if(!mp.pendingGameData) return;
+        app.isMultiplayer = true;
+        Object.keys(mp.players).forEach(id => mp.players[id].score = 0);
+
+        mp.broadcast({ type: 'GAME_START', gameData: mp.pendingGameData, players: mp.players });
+        playUI.loadGame("Multiplayer Match", mp.pendingGameData, true);
+        app.switchFrame('play-frame');
+    },
+
+    handleDataFromClient: (data, senderId) => {
+        if (data.type === 'WORD_FOUND_REQ') {
+            if (playUI.wordsToFind.includes(data.word)) {
+                mp.players[senderId].score += 1;
+                mp.broadcast({ type: 'WORD_FOUND_ACK', word: data.word, coords: data.coords, playerId: senderId, players: mp.players });
+                playUI.applyRemoteFoundWord(data.word, data.coords, senderId);
+            }
+        }
+    },
+
+    handleDataFromHost: (data) => {
+        if (data.type === 'AUTH_REJECTED') {
+            alert("Incorrect Password or Room is Private!");
+            mp.leaveRoom();
+        } else if (data.type === 'AUTH_ACCEPTED') {
+            document.getElementById('lobby-room-id').textContent = mp.roomId;
+            document.getElementById('btn-start-mp').style.display = 'none';
+            app.switchFrame('lobby-frame');
+        } else if (data.type === 'LOBBY_UPDATE') {
+            mp.players = data.players;
+            mp.updateLobbyUI();
+        } else if (data.type === 'GAME_START') {
+            app.isMultiplayer = true;
+            mp.players = data.players;
+            playUI.loadGame("Multiplayer Match", data.gameData, true);
+            app.switchFrame('play-frame');
+        } else if (data.type === 'WORD_FOUND_ACK') {
+            mp.players = data.players;
+            playUI.applyRemoteFoundWord(data.word, data.coords, data.playerId);
+        }
+    },
+
+    updateLobbyUI: () => {
+        const list = document.getElementById('lobby-players-list');
+        list.innerHTML = '';
+        Object.values(mp.players).forEach(p => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="player-dot" style="background-color: ${p.color};"></span> ${p.name}`;
+            list.appendChild(li);
+        });
+
+        if (app.isMultiplayer) {
+            const sbList = document.getElementById('scoreboard-list');
+            sbList.innerHTML = '';
+            Object.values(mp.players)
+                .sort((a,b) => b.score - a.score)
+                .forEach(p => {
+                    const li = document.createElement('li');
+                    li.className = 'player-score-item';
+                    li.innerHTML = `<span style="color:${p.color};">${p.name}</span> <span>${p.score}</span>`;
+                    sbList.appendChild(li);
+                });
+        }
+    }
+};
+
+
+// --- Singleplayer Create Logic ---
 const createUI = {
     words: [],
     reset: () => {
@@ -125,13 +317,8 @@ const createUI = {
         const input = document.getElementById('create-word');
         const word = input.value.trim().toUpperCase();
         const size = parseInt(document.getElementById('create-size').value);
-        
         if (!word || isNaN(size) || size <= 0) return;
-        if (word.length > size) {
-            alert(`The word '${word}' cannot fit in a ${size}x${size} grid.`);
-            return;
-        }
-        
+        if (word.length > size) return alert(`The word '${word}' cannot fit in a ${size}x${size} grid.`);
         if (!createUI.words.includes(word)) {
             createUI.words.push(word);
             const li = document.createElement('li');
@@ -143,39 +330,80 @@ const createUI = {
     generateAndSave: () => {
         const name = document.getElementById('create-name').value.trim();
         const size = parseInt(document.getElementById('create-size').value);
-        
         if (!name) return alert("Please enter a Game Name.");
         if (!createUI.words.length) return alert("Please add at least one word.");
 
         const ws = new WordSearchGenerator(size);
         const wordsPlaced = [];
-        const failedWords = [];
+        createUI.words.forEach(word => { if (ws.addWord(word)) wordsPlaced.push(word); });
 
-        createUI.words.forEach(word => {
-            if (ws.addWord(word)) wordsPlaced.push(word);
-            else failedWords.push(word);
-        });
-
-        if (failedWords.length) alert(`Could not place: ${failedWords.join(', ')}`);
         if (!wordsPlaced.length) return alert("Could not place any words.");
-
         ws.fillRandomLetters();
 
         const games = Storage.load();
         games[name] = { size: size, grid: ws.grid, words: wordsPlaced };
         Storage.save(games);
-
         alert(`Game '${name}' saved successfully!`);
-        app.switchFrame('home-frame');
+        app.switchFrame('sp-menu-frame');
     }
 };
 
-// Allow 'Enter' key to add word
-document.getElementById('create-word').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') createUI.addWord();
-});
+// --- Multiplayer Create Logic ---
+const mpCreateUI = {
+    words: [],
+    reset: () => {
+        mpCreateUI.words = [];
+        document.getElementById('mp-create-size').value = '12';
+        document.getElementById('mp-create-word').value = '';
+        document.getElementById('mp-create-word-list').innerHTML = '';
+        document.getElementById('mp-room-type').value = 'public';
+        document.getElementById('mp-room-pwd').value = '';
+        mpCreateUI.togglePassword();
+    },
+    togglePassword: () => {
+        const type = document.getElementById('mp-room-type').value;
+        document.getElementById('mp-password-group').style.display = type === 'private' ? 'block' : 'none';
+    },
+    addWord: () => {
+        const input = document.getElementById('mp-create-word');
+        const word = input.value.trim().toUpperCase();
+        const size = parseInt(document.getElementById('mp-create-size').value);
+        if (!word || isNaN(size) || size <= 0) return;
+        if (word.length > size) return alert(`Word too long.`);
+        if (!mpCreateUI.words.includes(word)) {
+            mpCreateUI.words.push(word);
+            const li = document.createElement('li');
+            li.textContent = "  " + word;
+            document.getElementById('mp-create-word-list').appendChild(li);
+            input.value = '';
+        }
+    },
+    generateAndHost: () => {
+        const size = parseInt(document.getElementById('mp-create-size').value);
+        if (!mpCreateUI.words.length) return alert("Please add words.");
 
-// --- Select Game Logic ---
+        const isPrivate = document.getElementById('mp-room-type').value === 'private';
+        const password = document.getElementById('mp-room-pwd').value.trim();
+
+        if (isPrivate && !password) return alert("Please enter a password for the private room.");
+
+        const ws = new WordSearchGenerator(size);
+        const wordsPlaced = [];
+        mpCreateUI.words.forEach(word => { if (ws.addWord(word)) wordsPlaced.push(word); });
+
+        if (!wordsPlaced.length) return alert("Could not place any words.");
+        ws.fillRandomLetters();
+
+        mp.isPrivate = isPrivate;
+        mp.password = password;
+        mp.createRoomHost({ size: size, grid: ws.grid, words: wordsPlaced });
+    }
+};
+
+document.getElementById('create-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') createUI.addWord(); });
+document.getElementById('mp-create-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') mpCreateUI.addWord(); });
+
+// --- Select Game Logic (Singleplayer) ---
 const selectUI = {
     selectedGame: null,
     refreshList: () => {
@@ -197,14 +425,7 @@ const selectUI = {
     },
     deleteGame: () => {
         if (!selectUI.selectedGame) return alert("Select a game to delete.");
-
-        // --- NOVA TRAVA DE SEGURANÇA ---
-        if (defaultGames[selectUI.selectedGame]) {
-            alert("You cannot delete the built-in default games.");
-            return;
-        }
-        // -------------------------------
-
+        if (defaultGames[selectUI.selectedGame]) return alert("You cannot delete the built-in default games.");
         if (confirm(`Delete '${selectUI.selectedGame}'?`)) {
             const games = Storage.load();
             delete games[selectUI.selectedGame];
@@ -214,8 +435,9 @@ const selectUI = {
     },
     playGame: () => {
         if (!selectUI.selectedGame) return alert("Select a game first.");
+        app.isMultiplayer = false;
         const data = Storage.load()[selectUI.selectedGame];
-        playUI.loadGame(selectUI.selectedGame, data);
+        playUI.loadGame(selectUI.selectedGame, data, false);
         app.switchFrame('play-frame');
     }
 };
@@ -226,7 +448,7 @@ const playUI = {
     foundCells: new Set(), selectedCells: [], startCell: null,
     isDragging: false, isViewMode: false, hintActive: false, wordCoordsMap: {},
 
-    loadGame: (name, data) => {
+    loadGame: (name, data, isMp = false) => {
         playUI.size = data.size;
         playUI.gridData = data.grid;
         playUI.originalWords = [...data.words];
@@ -235,13 +457,27 @@ const playUI = {
         playUI.selectedCells = [];
         playUI.isViewMode = false;
         playUI.hintActive = false;
-        
+
         document.getElementById('play-game-name').textContent = name;
         document.getElementById('btn-view').style.background = 'var(--btn-warn)';
-        
+
+        if (isMp) {
+            document.getElementById('sp-actions').style.display = 'none';
+            document.getElementById('scoreboard-container').style.display = 'block';
+            mp.updateLobbyUI();
+        } else {
+            document.getElementById('sp-actions').style.display = 'block';
+            document.getElementById('scoreboard-container').style.display = 'none';
+        }
+
         playUI.wordCoordsMap = playUI._mapAllWords();
         playUI.updateWordList();
         playUI.renderGrid();
+    },
+
+    exitGame: () => {
+        if(app.isMultiplayer) mp.leaveRoom();
+        else app.switchFrame('sp-menu-frame');
     },
 
     _mapAllWords: () => {
@@ -286,22 +522,19 @@ const playUI = {
                 cell.dataset.c = c;
                 cell.id = `cell-${r}-${c}`;
 
-                // Desktop Mouse Events
                 cell.onmousedown = (e) => playUI.onDragStart(r, c, e);
                 cell.onmouseenter = () => playUI.onDragMotion(r, c);
                 cell.onmouseup = () => playUI.onDragRelease();
 
-                // Mobile Touch Events
                 cell.addEventListener('touchstart', (e) => {
-                    e.preventDefault(); // Impede o clique duplo de dar zoom
-                    playUI.onDragStart(r, c, { button: 0 }); // Simula clique esquerdo
+                    e.preventDefault();
+                    playUI.onDragStart(r, c, { button: 0 });
                 }, { passive: false });
 
                 container.appendChild(cell);
             }
         }
 
-        // Adiciona um listener global para capturar o movimento do dedo pela tela
         container.addEventListener('touchmove', playUI.onTouchMotion, { passive: false });
         container.addEventListener('touchend', playUI.onDragRelease);
     },
@@ -318,7 +551,7 @@ const playUI = {
     },
 
     onDragStart: (r, c, e) => {
-        if (playUI.isViewMode || e.button !== 0) return; // Only left click
+        if (playUI.isViewMode || e.button !== 0) return;
         playUI.isDragging = true;
         playUI.startCell = { r, c };
         playUI.updateDragSelection(r, c);
@@ -330,19 +563,12 @@ const playUI = {
     },
 
     onTouchMotion: (e) => {
-        e.preventDefault(); // Impede scroll
+        e.preventDefault();
         if (!playUI.isDragging || playUI.isViewMode) return;
-
-        // Pega as coordenadas X e Y do primeiro dedo tocando a tela
         const touch = e.touches[0];
-        // Descobre qual elemento HTML está exatamente debaixo do dedo
         const target = document.elementFromPoint(touch.clientX, touch.clientY);
-
-        // Se o dedo estiver sobre uma célula da grade, extrai o R e C e atualiza
         if (target && target.classList.contains('cell')) {
-            const r = parseInt(target.dataset.r);
-            const c = parseInt(target.dataset.c);
-            playUI.updateDragSelection(r, c);
+            playUI.updateDragSelection(parseInt(target.dataset.r), parseInt(target.dataset.c));
         }
     },
 
@@ -370,7 +596,9 @@ const playUI = {
                 const c = startC + i * stepC;
                 playUI.selectedCells.push(`${r},${c}`);
                 const cellObj = document.getElementById(`cell-${r}-${c}`);
-                if (!cellObj.classList.contains('hint')) cellObj.classList.add('selected');
+                if (!cellObj.classList.contains('hint') && !playUI.foundCells.has(`${r},${c}`)) {
+                    cellObj.classList.add('selected');
+                }
             }
         }
     },
@@ -389,7 +617,7 @@ const playUI = {
             const [r, c] = coord.split(',');
             return playUI.gridData[r][c];
         }).join('');
-        
+
         let reversedWord = selectedWord.split('').reverse().join('');
         let foundWord = null;
 
@@ -397,31 +625,61 @@ const playUI = {
         else if (playUI.wordsToFind.includes(reversedWord)) foundWord = reversedWord;
 
         if (foundWord) {
-            playUI.wordsToFind = playUI.wordsToFind.filter(w => w !== foundWord);
-            playUI.selectedCells.forEach(coord => {
-                playUI.foundCells.add(coord);
-                document.getElementById(`cell-${coord.replace(',', '-')}`).classList.add('found');
-            });
-            playUI.updateWordList();
-            
-            // Check win condition
-            setTimeout(() => {
-               if (playUI.wordsToFind.length === 0) alert("Congratulations! You found all the words!");
-            }, 100);
-            
+            if (app.isMultiplayer) {
+                if (mp.isHost) {
+                    mp.handleDataFromClient({ type: 'WORD_FOUND_REQ', word: foundWord, coords: playUI.selectedCells }, mp.myId);
+                } else {
+                    mp.hostConn.send({ type: 'WORD_FOUND_REQ', word: foundWord, coords: playUI.selectedCells });
+                }
+                playUI.clearCurrentSelectionColors();
+            } else {
+                playUI.applyRemoteFoundWord(foundWord, playUI.selectedCells, null);
+            }
         } else {
             playUI.clearCurrentSelectionColors();
         }
         playUI.selectedCells = [];
     },
 
+    applyRemoteFoundWord: (word, coords, playerId) => {
+        if (!playUI.wordsToFind.includes(word)) return;
+
+        playUI.wordsToFind = playUI.wordsToFind.filter(w => w !== word);
+        playUI.updateWordList();
+
+        if (app.isMultiplayer) mp.updateLobbyUI();
+
+        let highlightColor = 'var(--cell-found)';
+        if (app.isMultiplayer && mp.players[playerId]) {
+            highlightColor = mp.players[playerId].color;
+        }
+
+        coords.forEach(coord => {
+            playUI.foundCells.add(coord);
+            const el = document.getElementById(`cell-${coord.replace(',', '-')}`);
+            el.classList.remove('selected');
+            el.style.backgroundColor = highlightColor;
+            el.style.color = '#ffffff';
+        });
+
+        if (playUI.wordsToFind.length === 0) {
+            setTimeout(() => {
+                if (app.isMultiplayer) {
+                    const sorted = Object.values(mp.players).sort((a,b) => b.score - a.score);
+                    alert(`Game Over! ${sorted[0].name} wins with ${sorted[0].score} points!`);
+                } else {
+                    alert("Congratulations! You found all the words!");
+                }
+            }, 100);
+        }
+    },
+
     triggerHint: () => {
         if (playUI.isViewMode || playUI.wordsToFind.length === 0 || playUI.hintActive) return;
         playUI.hintActive = true;
-        
         const word = playUI.wordsToFind[Math.floor(Math.random() * playUI.wordsToFind.length)];
         const coords = playUI.wordCoordsMap[word] || [];
-        
+
         coords.forEach(coord => {
             if (!playUI.foundCells.has(coord)) {
                 document.getElementById(`cell-${coord.replace(',', '-')}`).classList.add('hint');
@@ -439,7 +697,7 @@ const playUI = {
     toggleSolution: () => {
         playUI.isViewMode = !playUI.isViewMode;
         const btn = document.getElementById('btn-view');
-        
+
         if (playUI.isViewMode) {
             btn.style.background = 'var(--entry-bg)';
             Object.values(playUI.wordCoordsMap).forEach(coords => {

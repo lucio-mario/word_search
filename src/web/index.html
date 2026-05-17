@@ -5,14 +5,86 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Word Search Application</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
     <div id="app">
         <div id="home-frame" class="frame active">
             <div class="container-center">
-                <h1>Word Search Generator</h1>
+                <h1>Word Search</h1>
+                <button class="btn-primary btn-large" onclick="app.switchFrame('sp-menu-frame')">Singleplayer</button>
+                <button class="btn-hint btn-large" onclick="app.switchFrame('mp-menu-frame')">Multiplayer</button>
+                <button class="btn-secondary btn-large" onclick="app.exitApp()">Exit Game</button>
+            </div>
+        </div>
+
+        <div id="sp-menu-frame" class="frame">
+            <div class="container-center">
+                <h2>Singleplayer Mode</h2>
                 <button class="btn-primary btn-large" onclick="app.switchFrame('create-frame')">Create New Game</button>
                 <button class="btn-success btn-large" onclick="app.switchFrame('select-frame')">Play Saved Game</button>
+                <button class="btn-secondary btn-large" onclick="app.switchFrame('home-frame')">Back to Home</button>
+            </div>
+        </div>
+
+        <div id="mp-menu-frame" class="frame">
+            <div class="container-center">
+                <h2>Multiplayer Mode</h2>
+                <button class="btn-primary btn-large" onclick="app.switchFrame('mp-create-frame')">Create Room (Host)</button>
+                <button class="btn-success btn-large" onclick="app.switchFrame('mp-join-frame')">Join Room</button>
+                <button class="btn-secondary btn-large" onclick="app.switchFrame('home-frame')">Back to Home</button>
+            </div>
+        </div>
+
+        <div id="mp-join-frame" class="frame">
+            <div class="container-center">
+                <h2>Join a Room</h2>
+                <div class="form-group" style="text-align: center; margin-bottom: 10px;">
+                    <input type="text" id="join-room-id" placeholder="Room ID (Ex: ABX9)" style="text-align: center; text-transform: uppercase; font-size: 16px; letter-spacing: 3px;">
+                </div>
+                <div class="form-group" style="text-align: center; margin-bottom: 20px;">
+                    <input type="password" id="join-room-pwd" placeholder="Password (if private)" style="text-align: center; font-size: 14px;">
+                </div>
+                <div class="action-row" style="width: 250px;">
+                    <button class="btn-secondary btn-fixed" onclick="app.switchFrame('mp-menu-frame')">Back</button>
+                    <button class="btn-success btn-fixed" onclick="mp.joinRoom()" style="width: 140px;">Join</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="mp-create-frame" class="frame">
+            <div class="sidebar">
+                <h2>Host Setup</h2>
+                <div class="form-group">
+                    <label>Room Visibility</label>
+                    <select id="mp-room-type" onchange="mpCreateUI.togglePassword()" style="width: 100%; padding: 8px; background: var(--entry-bg); color: var(--fg-text); border: none; font-size: 11px; outline: none;">
+                        <option value="public">Public (No Password)</option>
+                        <option value="private">Private (Requires Password)</option>
+                    </select>
+                </div>
+                <div class="form-group" id="mp-password-group" style="display: none;">
+                    <label>Password</label>
+                    <input type="text" id="mp-room-pwd" placeholder="Create a password">
+                </div>
+                <div class="form-group">
+                    <label>Grid Size</label>
+                    <input type="number" id="mp-create-size" value="12" min="5" max="30">
+                </div>
+                <div class="form-group">
+                    <label>Add Word</label>
+                    <div class="input-row">
+                        <input type="text" id="mp-create-word" placeholder="Type a word">
+                        <button class="btn-primary" onclick="mpCreateUI.addWord()">Add</button>
+                    </div>
+                </div>
+                <div class="bottom-actions">
+                    <button class="btn-success btn-large" onclick="mpCreateUI.generateAndHost()">Create & Go to Lobby</button>
+                    <button class="btn-secondary" onclick="app.switchFrame('mp-menu-frame')">Back</button>
+                </div>
+            </div>
+            <div class="main-area">
+                <h2>Words to hide:</h2>
+                <ul id="mp-create-word-list" class="listbox"></ul>
             </div>
         </div>
 
@@ -36,7 +108,7 @@
                 </div>
                 <div class="bottom-actions">
                     <button class="btn-success btn-large" onclick="createUI.generateAndSave()">Generate & Save</button>
-                    <button class="btn-secondary" onclick="app.switchFrame('home-frame')">Back to Home</button>
+                    <button class="btn-secondary" onclick="app.switchFrame('sp-menu-frame')">Back</button>
                 </div>
             </div>
             <div class="main-area">
@@ -51,7 +123,7 @@
                     <h2>Select a Game</h2>
                     <ul id="select-game-list" class="listbox select-list"></ul>
                     <div class="action-row">
-                        <button class="btn-secondary btn-fixed" onclick="app.switchFrame('home-frame')">Back</button>
+                        <button class="btn-secondary btn-fixed" onclick="app.switchFrame('sp-menu-frame')">Back</button>
                         <div class="right-actions">
                             <button class="btn-danger btn-fixed" onclick="selectUI.deleteGame()">Delete</button>
                             <button class="btn-success btn-fixed" onclick="selectUI.playGame()">Play</button>
@@ -61,20 +133,42 @@
             </div>
         </div>
 
+        <div id="lobby-frame" class="frame">
+            <div class="container-center">
+                <h2>Room ID: <span id="lobby-room-id" style="color: var(--cell-sel);"></span></h2>
+                <p class="subtitle" style="margin-bottom: 20px;">Waiting for players...</p>
+                <div class="select-container">
+                    <ul id="lobby-players-list" class="listbox no-bg" style="font-size: 14px;"></ul>
+                    <div class="action-row">
+                        <button class="btn-secondary btn-fixed" onclick="mp.leaveRoom()">Leave</button>
+                        <div class="right-actions">
+                            <button id="btn-start-mp" class="btn-success btn-fixed" onclick="mp.startGameHost()" style="display:none; width: 140px;">Start Game</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="play-frame" class="frame">
             <div class="sidebar">
                 <h2 id="play-game-name" class="wrap-text">Game Name</h2>
+
+                <div id="scoreboard-container" style="display: none; margin-bottom: 20px;">
+                    <label class="subtitle">Scoreboard:</label>
+                    <ul id="scoreboard-list" class="listbox no-bg"></ul>
+                </div>
+
                 <label class="subtitle">Words to find:</label>
                 <ul id="play-word-list" class="listbox no-bg"></ul>
-                
-                <div class="action-group">
+
+                <div id="sp-actions" class="action-group">
                     <button class="btn-hint" id="btn-hint" onclick="playUI.triggerHint()">Show Hint</button>
                     <button class="btn-warn" id="btn-view" onclick="playUI.toggleSolution()">Toggle Solution</button>
                 </div>
 
                 <div class="bottom-actions">
                     <p class="hint-text">Click and drag to select</p>
-                    <button class="btn-secondary" onclick="app.switchFrame('home-frame')">Exit Game</button>
+                    <button class="btn-secondary" onclick="playUI.exitGame()">Exit Game</button>
                 </div>
             </div>
             <div class="main-area flex-center">
