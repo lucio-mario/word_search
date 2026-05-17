@@ -14,7 +14,7 @@
                 <h1>Word Search</h1>
                 <button class="btn-primary btn-large" onclick="app.switchFrame('sp-menu-frame')">Singleplayer</button>
                 <button class="btn-hint btn-large" onclick="app.switchFrame('mp-menu-frame')">Multiplayer</button>
-                <button class="btn-secondary btn-large" onclick="app.exitApp()">Exit Game</button>
+                <button class="btn-secondary btn-large" onclick="app.exitApp()">Close Window</button>
             </div>
         </div>
 
@@ -136,7 +136,11 @@
 
         <div id="lobby-frame" class="frame">
             <div class="sidebar">
-                <h2>Room Info</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2 style="margin: 0;">Room Info</h2>
+                    <button class="btn-danger" style="padding: 6px 12px; font-size: 11px; border-radius: 4px;" onclick="mp.leaveRoom()">Leave</button>
+                </div>
+
                 <div style="background: var(--entry-bg); padding: 10px; margin-bottom: 20px; font-size: 12px; color: var(--fg-subtext);">
                     <p>ID: <strong id="lobby-info-id" style="color: var(--cell-sel); font-size: 14px; letter-spacing: 2px;"></strong></p>
                     <p id="lobby-info-pwd-wrap">Password: <strong id="lobby-info-pwd" style="color: var(--fg-text);"></strong></p>
@@ -163,8 +167,7 @@
                 </div>
 
                 <div class="bottom-actions">
-                    <button id="btn-start-mp" class="btn-success btn-large" style="display:none;" onclick="mp.startGameHost()">Start Game</button>
-                    <button class="btn-secondary" onclick="mp.leaveRoom()">Leave Room</button>
+                    <button id="btn-start-mp" class="btn-success btn-large" style="display:none; width: 100%;" onclick="mp.startGameHost()">Start Game</button>
                 </div>
             </div>
 
@@ -191,6 +194,8 @@
                         <button class="btn-primary" onclick="mp.sendChat('lobby')">Send</button>
                     </div>
                 </div>
+
+                <button class="btn-secondary" style="margin-top: 15px; padding: 12px; width: 100%;" onclick="mp.leaveRoom()">Leave Room</button>
             </div>
         </div>
 

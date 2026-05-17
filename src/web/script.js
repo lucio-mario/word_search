@@ -179,7 +179,6 @@ const mp = {
         if (!mp.isHost) return;
         if (confirm("End the match early? (No one will get win points)")) {
             app.isMultiplayer = false;
-            // Transmite GAME_OVER sem calcular as vitórias, forçando a volta para o Lobby
             mp.broadcast({ type: 'GAME_OVER', players: mp.players });
             app.switchFrame('lobby-frame');
             mp.updateLobbyUI();
@@ -459,7 +458,6 @@ const mp = {
         mp.connections.forEach(conn => conn.send(data));
     },
 
-    // --- CHAT LOGIC ---
     sendChat: (source) => {
         const inputId = source === 'lobby' ? 'lobby-chat-input' : 'ingame-chat-input';
         const input = document.getElementById(inputId);
@@ -531,7 +529,6 @@ const mp = {
             body.style.display = 'none';
         }
     },
-    // ------------------
 
     startGameHost: () => {
         if(mp.lobbyWords.length === 0) return alert("Add at least one word to start!");
@@ -696,14 +693,6 @@ const mp = {
     }
 };
 
-// Enter keys for chat
-document.getElementById('lobby-chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.sendChat('lobby'); });
-document.getElementById('ingame-chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.sendChat('ingame'); });
-
-document.getElementById('create-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') createUI.addWord(); });
-document.getElementById('lobby-new-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.addLobbyWord(); });
-
-// --- Singleplayer Create Logic ---
 const createUI = {
     words: [],
     reset: () => {
@@ -748,7 +737,6 @@ const createUI = {
     }
 };
 
-// --- Multiplayer Create Settings ---
 const mpCreateUI = {
     reset: () => {
         document.getElementById('mp-host-name').value = 'Host';
@@ -783,7 +771,9 @@ const mpCreateUI = {
     }
 };
 
-// --- Select Game Logic (Singleplayer) ---
+document.getElementById('create-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') createUI.addWord(); });
+document.getElementById('lobby-new-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.addLobbyWord(); });
+
 const selectUI = {
     selectedGame: null,
     refreshList: () => {
@@ -822,7 +812,6 @@ const selectUI = {
     }
 };
 
-// --- Play Game Logic ---
 const playUI = {
     size: 0, gridData: [], originalWords: [], wordsToFind: [],
     foundCells: new Set(), selectedCells: [], startCell: null,
@@ -899,14 +888,8 @@ const playUI = {
     renderGrid: () => {
         const container = document.getElementById('grid-container');
 
-        // Auto-Scale da Grid para caber na tela do celular
-        let cellSize = 30; // Padrão
-        if (window.innerWidth <= 768) {
-            const availableWidth = window.innerWidth - 40; // 20px padding lados
-            const totalGaps = (playUI.size - 1) * 4; // 4px de gap CSS
-            cellSize = Math.floor((availableWidth - totalGaps) / playUI.size);
-            cellSize = Math.max(14, Math.min(cellSize, 30)); // Limites saudáveis
-        }
+        // Remove manual scaling - leave size calculation to CSS/browser zoom
+        let cellSize = 30;
 
         container.style.gridTemplateColumns = `repeat(${playUI.size}, ${cellSize}px)`;
         container.innerHTML = '';
@@ -915,11 +898,6 @@ const playUI = {
             for (let c = 0; c < playUI.size; c++) {
                 const cell = document.createElement('div');
                 cell.className = 'cell';
-
-                // Aplica o tamanho e fonte dinamicamente
-                cell.style.width = `${cellSize}px`;
-                cell.style.height = `${cellSize}px`;
-                cell.style.fontSize = `${Math.max(10, cellSize * 0.55)}px`;
 
                 cell.textContent = playUI.gridData[r][c];
                 cell.dataset.r = r;
@@ -930,10 +908,14 @@ const playUI = {
                 cell.onmouseenter = () => playUI.onDragMotion(r, c);
                 cell.onmouseup = () => playUI.onDragRelease();
 
+                // Lógica de Touch modificada: Permite iniciar a drag, mas não dá preventDefault() no touchstart
+                // se o usuário estiver tentando usar dois dedos.
                 cell.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    playUI.onDragStart(r, c, { button: 0 });
-                }, { passive: false });
+                    if (e.touches.length === 1) {
+                        // Apenas um dedo = tentativa de selecionar palavra
+                        playUI.onDragStart(r, c, { button: 0 });
+                    }
+                }, { passive: true });
 
                 container.appendChild(cell);
             }
@@ -967,8 +949,16 @@ const playUI = {
     },
 
     onTouchMotion: (e) => {
-        e.preventDefault();
+        // Se usar mais de um dedo (pinch-zoom), ignora o drag de seleção
+        if (e.touches.length > 1) {
+            playUI.isDragging = false;
+            playUI.clearCurrentSelectionColors();
+            return;
+        }
+
         if (!playUI.isDragging || playUI.isViewMode) return;
+        e.preventDefault(); // Previne o scroll vertical apenas enquanto estiver arrastando com 1 dedo
+
         const touch = e.touches[0];
         const target = document.elementFromPoint(touch.clientX, touch.clientY);
         if (target && target.classList.contains('cell')) {
@@ -1010,7 +1000,7 @@ const playUI = {
     clearCurrentSelectionColors: () => {
         playUI.selectedCells.forEach(coord => {
             const cellObj = document.getElementById(`cell-${coord.replace(',', '-')}`);
-            cellObj.classList.remove('selected');
+            if (cellObj) cellObj.classList.remove('selected');
         });
     },
 
@@ -1065,9 +1055,11 @@ const playUI = {
         coords.forEach(coord => {
             playUI.foundCells.add(coord);
             const el = document.getElementById(`cell-${coord.replace(',', '-')}`);
-            el.classList.remove('selected');
-            el.style.backgroundColor = highlightColor;
-            el.style.color = '#ffffff';
+            if (el) {
+                el.classList.remove('selected');
+                el.style.backgroundColor = highlightColor;
+                el.style.color = '#ffffff';
+            }
         });
 
         if (playUI.wordsToFind.length === 0) {
@@ -1089,14 +1081,16 @@ const playUI = {
 
         coords.forEach(coord => {
             if (!playUI.foundCells.has(coord)) {
-                document.getElementById(`cell-${coord.replace(',', '-')}`).classList.add('hint');
+                const el = document.getElementById(`cell-${coord.replace(',', '-')}`);
+                if(el) el.classList.add('hint');
             }
         });
 
         setTimeout(() => {
             playUI.hintActive = false;
             coords.forEach(coord => {
-                document.getElementById(`cell-${coord.replace(',', '-')}`).classList.remove('hint');
+                const el = document.getElementById(`cell-${coord.replace(',', '-')}`);
+                if(el) el.classList.remove('hint');
             });
         }, 1500);
     },
@@ -1109,7 +1103,8 @@ const playUI = {
             btn.style.background = 'var(--entry-bg)';
             Object.values(playUI.wordCoordsMap).forEach(coords => {
                 coords.forEach(coord => {
-                    document.getElementById(`cell-${coord.replace(',', '-')}`).classList.add('view');
+                    const el = document.getElementById(`cell-${coord.replace(',', '-')}`);
+                    if(el) el.classList.add('view');
                 });
             });
         } else {
