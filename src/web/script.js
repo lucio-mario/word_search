@@ -177,8 +177,12 @@ const mp = {
 
     endGameHost: () => {
         if (!mp.isHost) return;
-        if (confirm("End the match and return everyone to the lobby?")) {
-            mp.calculateAndBroadcastWins();
+        if (confirm("End the match early? (No one will get win points)")) {
+            app.isMultiplayer = false;
+            // Transmite GAME_OVER sem calcular as vitórias, forçando a volta para o Lobby
+            mp.broadcast({ type: 'GAME_OVER', players: mp.players });
+            app.switchFrame('lobby-frame');
+            mp.updateLobbyUI();
         }
     },
 
@@ -352,6 +356,7 @@ const mp = {
         const newHostId = mp.peerOrder[0];
 
         if (mp.myId === newHostId) {
+
             const savedState = {
                 roomId: mp.roomId,
                 isPriv: mp.isPrivate,
@@ -472,7 +477,6 @@ const mp = {
     },
 
     handleChat: (chatObj) => {
-        // O Host recebe a mensagem, registra no histórico e repassa pra todos
         const pName = mp.players[chatObj.senderId]?.name || "Unknown";
         const pColor = mp.players[chatObj.senderId]?.color || "#FFF";
 
@@ -491,12 +495,10 @@ const mp = {
     },
 
     appendChatHTML: (msgObj) => {
-        // Cria elemento DOM da mensagem
         const el = document.createElement('div');
         el.className = 'chat-msg';
         el.innerHTML = `<strong style="color: ${msgObj.color}">${msgObj.name}:</strong> ${msgObj.text}`;
 
-        // Adiciona nas duas views de chat (Lobby e Jogo)
         const lobbyBox = document.getElementById('lobby-chat-messages');
         const gameBox = document.getElementById('ingame-chat-messages');
 
@@ -504,7 +506,6 @@ const mp = {
         if(lobbyBox) { lobbyBox.appendChild(el); lobbyBox.scrollTop = lobbyBox.scrollHeight; }
         if(gameBox) { gameBox.appendChild(elClone); gameBox.scrollTop = gameBox.scrollHeight; }
 
-        // Alerta visual In-Game se o painel estiver fechado
         const chatBody = document.getElementById('ingame-chat-body');
         const notif = document.getElementById('chat-notif');
         if (app.isMultiplayer && chatBody && chatBody.style.display === 'none') {
@@ -586,7 +587,6 @@ const mp = {
             mp.password = data.password;
             mp.maxPlayers = data.maxPlayers;
 
-            // Baixa histórico de chat ao conectar
             if(data.chatHistory) {
                 mp.chatHistory = data.chatHistory;
                 mp.renderChat();
@@ -699,7 +699,7 @@ const mp = {
 // Enter keys for chat
 document.getElementById('lobby-chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.sendChat('lobby'); });
 document.getElementById('ingame-chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.sendChat('ingame'); });
-// Existing Enters
+
 document.getElementById('create-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') createUI.addWord(); });
 document.getElementById('lobby-new-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.addLobbyWord(); });
 
@@ -847,7 +847,7 @@ const playUI = {
             document.getElementById('btn-end-mp').style.display = mp.isHost ? 'block' : 'none';
             document.getElementById('btn-leave-mp').style.display = 'block';
             document.getElementById('ingame-chat-container').style.display = 'flex';
-            document.getElementById('ingame-chat-body').style.display = 'none'; // Default hidden in game
+            document.getElementById('ingame-chat-body').style.display = 'none';
             document.getElementById('chat-notif').style.display = 'none';
             mp.updateLobbyUI();
         } else {
@@ -898,13 +898,29 @@ const playUI = {
 
     renderGrid: () => {
         const container = document.getElementById('grid-container');
-        container.style.gridTemplateColumns = `repeat(${playUI.size}, 30px)`;
+
+        // Auto-Scale da Grid para caber na tela do celular
+        let cellSize = 30; // Padrão
+        if (window.innerWidth <= 768) {
+            const availableWidth = window.innerWidth - 40; // 20px padding lados
+            const totalGaps = (playUI.size - 1) * 4; // 4px de gap CSS
+            cellSize = Math.floor((availableWidth - totalGaps) / playUI.size);
+            cellSize = Math.max(14, Math.min(cellSize, 30)); // Limites saudáveis
+        }
+
+        container.style.gridTemplateColumns = `repeat(${playUI.size}, ${cellSize}px)`;
         container.innerHTML = '';
 
         for (let r = 0; r < playUI.size; r++) {
             for (let c = 0; c < playUI.size; c++) {
                 const cell = document.createElement('div');
                 cell.className = 'cell';
+
+                // Aplica o tamanho e fonte dinamicamente
+                cell.style.width = `${cellSize}px`;
+                cell.style.height = `${cellSize}px`;
+                cell.style.fontSize = `${Math.max(10, cellSize * 0.55)}px`;
+
                 cell.textContent = playUI.gridData[r][c];
                 cell.dataset.r = r;
                 cell.dataset.c = c;

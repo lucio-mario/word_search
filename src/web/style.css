@@ -36,7 +36,7 @@ body { background-color: var(--bg-main); color: var(--fg-text); height: 100vh; o
 /* Typography & Forms */
 h1 { font-size: 28px; margin-bottom: 40px; }
 h2 { font-size: 18px; margin-bottom: 20px; }
-.subtitle { color: var(--fg-subtext); font-weight: bold; margin-bottom: 5px; display: block;}
+.subtitle { color: var(--fg-subtext); font-weight: bold; margin-bottom: 5px; display: block; }
 .form-group { margin-bottom: 15px; text-align: left; }
 .form-group label { color: var(--fg-subtext); font-size: 11px; display: block; margin-bottom: 5px; }
 input { width: 100%; padding: 8px; background: var(--entry-bg); border: none; color: var(--fg-text); font-size: 11px; outline: none; }
@@ -70,20 +70,32 @@ button { border: none; padding: 8px 16px; color: var(--fg-text); cursor: pointer
 
 /* Grid */
 .grid { display: grid; gap: 4px; user-select: none; }
-.cell { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: var(--cell-bg); font-family: Courier, monospace; font-weight: bold; font-size: 14px; cursor: crosshair; transition: background 0.1s;}
+.cell { 
+    width: 30px; 
+    height: 30px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    background: var(--cell-bg); 
+    font-family: Courier, monospace; 
+    font-weight: bold; 
+    font-size: 14px; 
+    cursor: crosshair; 
+    transition: background 0.1s;
+    touch-action: pinch-zoom; 
+}
 .cell.selected { background: var(--cell-sel) !important; color: #000 !important; }
 .cell.found { background: var(--cell-found); }
 .cell.hint { background: var(--cell-hint); }
 .cell.view { background: var(--cell-view); }
 
-/* --- Layout Fixes --- */
+/* Layout Fixes */
 .select-container { width: 450px; display: flex; flex-direction: column; align-items: stretch; }
 .select-container .listbox { height: 220px; flex-grow: 0; margin-bottom: 10px; text-align: left; }
 .right-actions { display: flex; gap: 10px; }
 .btn-fixed, .action-row .btn-secondary { width: 100px; padding: 10px; }
-.cell { touch-action: none; }
 
-/* Multiplayer Scoreboard Items */
+/* Multiplayer Scoreboard */
 .player-score-item { display: flex; justify-content: space-between; font-weight: bold; padding: 8px !important;}
 .player-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px;}
 
@@ -124,42 +136,35 @@ button { border: none; padding: 8px 16px; color: var(--fg-text); cursor: pointer
     flex-grow: 1;
     margin-right: 5px;
 }
-.chat-msg {
-    word-break: break-word;
-}
-.chat-msg strong {
-    margin-right: 3px;
-}
+.chat-msg { word-break: break-word; }
+.chat-msg strong { margin-right: 3px; }
 
 /* In-Game Chat Specifics */
 .ingame-chat {
-    position: absolute;
+    position: fixed;
     bottom: 20px;
     right: 20px;
     width: 250px;
     max-height: 300px;
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    z-index: 100;
+    z-index: 1000;
 }
-.ingame-chat .chat-header {
-    cursor: pointer;
-    background: var(--btn-primary);
-}
-.ingame-chat .chat-header:hover {
-    background: var(--btn-primary-act);
-}
-.ingame-chat .chat-body {
-    display: flex;
-    flex-direction: column;
-    height: 200px;
-}
+.ingame-chat .chat-header { cursor: pointer; background: var(--btn-primary); }
+.ingame-chat .chat-header:hover { background: var(--btn-primary-act); }
+.ingame-chat .chat-body { display: flex; flex-direction: column; height: 200px; }
 
 @media (max-width: 768px) {
     body { height: auto; overflow-y: auto; }
     .frame { height: auto; min-height: 100vh; }
     .frame.active { flex-direction: column; }
     #play-frame .main-area { order: 1; padding-bottom: 0; }
-    #play-frame .sidebar { order: 2; flex-grow: 1; }
+    
+    #play-frame .sidebar { 
+        order: 2; 
+        flex-grow: 1; 
+        padding-bottom: 60px;
+    }
+    
     .sidebar { width: 100%; height: auto; padding: 10px; }
     .main-area { padding: 10px; }
     .listbox { max-height: 150px; }
