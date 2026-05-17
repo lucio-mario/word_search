@@ -168,6 +168,7 @@ const mp = {
         }
     },
 
+    // A função principal de criar a sala, agora sem receber dados do gerador
     createRoomHost: (hostName, isPrivate, password, maxPlayers) => {
         mp.cleanup();
         mp.isHost = true;
@@ -223,9 +224,9 @@ const mp = {
                 const pName = conn.metadata?.playerName || `Player ${pCount + 1}`;
                 mp.players[conn.peer] = { name: pName, color: color, score: 0 };
 
-                mp.syncLobbySettings(); // Envia as configurações atuais e a lista de jogadores
+                mp.syncLobbySettings();
 
-                // LATE JOIN: O jogo já está rolando
+                // LATE JOIN
                 if (app.isMultiplayer) {
                     conn.send({
                         type: 'GAME_START',
@@ -244,7 +245,7 @@ const mp = {
             conn.on('close', () => {
                 mp.connections = mp.connections.filter(c => c.peer !== conn.peer);
                 if(mp.players[conn.peer]) {
-                    delete mp.players[conn.peer]; // Remove jogador da lista
+                    delete mp.players[conn.peer];
                     mp.syncLobbySettings();
                 }
             });
@@ -280,7 +281,6 @@ const mp = {
         });
     },
 
-    // --- Controles de Lobby do Host ---
     addLobbyWord: () => {
         const input = document.getElementById('lobby-new-word');
         const word = input.value.trim().toUpperCase();
@@ -310,9 +310,8 @@ const mp = {
             settings: { size: mp.lobbyGridSize, words: mp.lobbyWords }
         };
         mp.broadcast(payload);
-        mp.updateLobbyUI(); // Atualiza a tela do próprio Host
+        mp.updateLobbyUI();
     },
-    // ----------------------------------
 
     broadcast: (data) => {
         mp.connections.forEach(conn => conn.send(data));
@@ -402,7 +401,6 @@ const mp = {
     },
 
     updateLobbyUI: () => {
-        // Atualiza Infos de Jogadores
         document.getElementById('lobby-info-count').textContent = Object.keys(mp.players).length;
 
         const list = document.getElementById('lobby-players-list');
@@ -413,14 +411,12 @@ const mp = {
             list.appendChild(li);
         });
 
-        // Atualiza a lista de Palavras no Lobby
         const wordList = document.getElementById('lobby-words-list');
         wordList.innerHTML = '';
         mp.lobbyWords.forEach((word, index) => {
             const li = document.createElement('li');
             li.textContent = "  " + word;
 
-            // O Host vê o botão de deletar palavras
             if (mp.isHost) {
                 const delBtn = document.createElement('button');
                 delBtn.textContent = 'X';
@@ -433,12 +429,10 @@ const mp = {
             wordList.appendChild(li);
         });
 
-        // Atualiza UI específica do Client (ver tamanho da grade)
         if (!mp.isHost) {
             document.getElementById('lobby-view-size').textContent = mp.lobbyGridSize;
         }
 
-        // Atualiza o Scoreboard (se estiver no meio de um jogo)
         if (app.isMultiplayer) {
             const sbList = document.getElementById('scoreboard-list');
             sbList.innerHTML = '';
@@ -512,6 +506,7 @@ const mpCreateUI = {
         const type = document.getElementById('mp-room-type').value;
         document.getElementById('mp-password-group').style.display = type === 'private' ? 'block' : 'none';
     },
+    // Removidas as funções de addWord daqui
     generateAndHost: () => {
         const hName = document.getElementById('mp-host-name').value.trim() || 'Host';
         const isPrivate = document.getElementById('mp-room-type').value === 'private';
@@ -520,7 +515,7 @@ const mpCreateUI = {
 
         if (isPrivate && !password) return alert("Please enter a password for the private room.");
 
-        // Vai para o Lobby limpo
+        // Abre o lobby direto, sem precisar processar o grid agora
         mp.createRoomHost(hName, isPrivate, password, maxPlayers);
     }
 };
