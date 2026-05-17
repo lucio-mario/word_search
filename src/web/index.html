@@ -138,6 +138,12 @@
                 <h2>Room ID: <span id="lobby-room-id" style="color: var(--cell-sel);"></span></h2>
                 <p class="subtitle" style="margin-bottom: 20px;">Waiting for players...</p>
                 <div class="select-container">
+
+                    <div class="form-group" style="text-align: center; margin-bottom: 15px;">
+                        <input type="text" id="lobby-player-name" placeholder="Change your name" style="width: 60%; display: inline-block; font-size: 12px; text-align: center;">
+                        <button class="btn-primary" onclick="mp.updateName()" style="width: 30%; display: inline-block; padding: 8px;">Update</button>
+                    </div>
+
                     <ul id="lobby-players-list" class="listbox no-bg" style="font-size: 14px;"></ul>
                     <div class="action-row">
                         <button class="btn-secondary btn-fixed" onclick="mp.leaveRoom()">Leave</button>
@@ -168,6 +174,8 @@
 
                 <div class="bottom-actions">
                     <p class="hint-text">Click and drag to select</p>
+                    <button id="btn-end-mp" class="btn-danger" onclick="mp.endGameHost()" style="display:none; width: 100%; margin-bottom: 10px; padding: 10px;">End Game (Host)</button>
+
                     <button class="btn-secondary" onclick="playUI.exitGame()">Exit Game</button>
                 </div>
             </div>

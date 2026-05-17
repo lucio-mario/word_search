@@ -4,7 +4,7 @@
     --fg-text: #ffffff;
     --fg-subtext: #aaaaaa;
     --entry-bg: #3c3c3c;
-    
+
     --btn-primary: #1f5f99;
     --btn-primary-act: #2a7bbd;
     --btn-success: #2ebd59;
@@ -44,7 +44,7 @@ input { width: 100%; padding: 8px; background: var(--entry-bg); border: none; co
 
 /* Lists */
 .listbox { background: var(--entry-bg); flex-grow: 1; overflow-y: auto; list-style: none; padding: 10px; }
-.listbox li { padding: 5px; font-size: 11px; cursor: default; }
+.listbox li { padding: 5px; font-size: 11px; cursor: default; margin-bottom: 2px;}
 .listbox.select-list li { cursor: pointer; }
 .listbox.select-list li.selected { background: var(--btn-primary); }
 .listbox.no-bg { background: transparent; padding: 0; }
@@ -71,73 +71,30 @@ button { border: none; padding: 8px 16px; color: var(--fg-text); cursor: pointer
 /* Grid */
 .grid { display: grid; gap: 4px; user-select: none; }
 .cell { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: var(--cell-bg); font-family: Courier, monospace; font-weight: bold; font-size: 14px; cursor: crosshair; transition: background 0.1s;}
-.cell.selected { background: var(--cell-sel); color: #000; }
+.cell.selected { background: var(--cell-sel) !important; color: #000 !important; }
 .cell.found { background: var(--cell-found); }
 .cell.hint { background: var(--cell-hint); }
 .cell.view { background: var(--cell-view); }
 
-/* --- Select Game Layout Fixes --- */
-.select-container {
-    width: 450px;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-}
+/* --- Layout Fixes --- */
+.select-container { width: 450px; display: flex; flex-direction: column; align-items: stretch; }
+.select-container .listbox { height: 220px; flex-grow: 0; margin-bottom: 10px; text-align: left; }
+.right-actions { display: flex; gap: 10px; }
+.btn-fixed, .action-row .btn-secondary { width: 100px; padding: 10px; }
+.cell { touch-action: none; }
 
-.select-container .listbox {
-    height: 220px;
-    flex-grow: 0;
-    margin-bottom: 10px;
-    text-align: left;
-}
-
-.right-actions {
-    display: flex;
-    gap: 10px;
-}
-
-.btn-fixed, .action-row .btn-secondary {
-    width: 100px;
-    padding: 10px;
-}
-
-.cell {
-    touch-action: none;
-}
+/* Multiplayer Scoreboard Items */
+.player-score-item { display: flex; justify-content: space-between; font-weight: bold; padding: 8px !important;}
+.player-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px;}
 
 @media (max-width: 768px) {
-    body {
-        height: auto;
-        overflow-y: auto;
-    }
-    .frame {
-        height: auto;
-        min-height: 100vh;
-    }
-
-    .frame.active {
-        flex-direction: column;
-    }
-
-    #play-frame .main-area {
-        order: 1;
-        padding-bottom: 0;
-    }
-
-    #play-frame .sidebar {
-        order: 2;
-        flex-grow: 1;
-    }
-
-    .sidebar {
-        width: 100%;
-        height: auto;
-        padding: 10px;
-    }
-    .main-area {
-        padding: 10px;
-    }
-    .listbox {
-        max-height: 150px;
-    }
+    body { height: auto; overflow-y: auto; }
+    .frame { height: auto; min-height: 100vh; }
+    .frame.active { flex-direction: column; }
+    #play-frame .main-area { order: 1; padding-bottom: 0; }
+    #play-frame .sidebar { order: 2; flex-grow: 1; }
+    .sidebar { width: 100%; height: auto; padding: 10px; }
+    .main-area { padding: 10px; }
+    .listbox { max-height: 150px; }
+    .select-container { width: 100%; }
 }
