@@ -129,16 +129,12 @@ const mp = {
     password: '',
     maxPlayers: 4,
 
-    // Configurações do Lobby Compartilhado
     lobbyWords: [],
     lobbyGridSize: 12,
 
-    // Host state
     connections: [],
     players: {},
     cellColors: {},
-
-    // Client state
     hostConn: null,
 
     cleanup: () => {
@@ -179,7 +175,6 @@ const mp = {
         mp.roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
 
         try {
-            // Usa ID em minúsculo na rede para evitar bugs no servidor do PeerJS
             mp.peer = new Peer(`ws-game-${mp.roomId.toLowerCase()}`);
         } catch (e) {
             if (btn) { btn.textContent = "Open Lobby"; btn.disabled = false; }
@@ -191,7 +186,8 @@ const mp = {
             mp.myId = id;
             mp.players[id] = { name: hostName, color: PLAYER_COLORS[0], score: 0 };
 
-            document.getElementById('lobby-room-id').textContent = mp.roomId; // Exibe Maiúsculo
+            // O Erro estava aqui! Corrigido para lobby-info-id
+            document.getElementById('lobby-info-id').textContent = mp.roomId;
             document.getElementById('lobby-info-max').textContent = mp.maxPlayers;
 
             document.getElementById('lobby-info-pwd-wrap').style.display = mp.isPrivate ? 'block' : 'none';
@@ -280,7 +276,6 @@ const mp = {
         mp.peer = new Peer();
         mp.peer.on('open', (id) => {
             mp.myId = id;
-            // Conecta usando o ID em minúsculo
             mp.hostConn = mp.peer.connect(`ws-game-${mp.roomId.toLowerCase()}`, { metadata: { password: pwd, playerName: inputName } });
 
             mp.hostConn.on('data', (data) => mp.handleDataFromHost(data));
@@ -289,7 +284,6 @@ const mp = {
                 mp.leaveRoom();
             });
 
-            // Restaura o botão caso a conexão com o host demore/falhe e dispare erro
             mp.hostConn.on('error', () => {
                 if (btn) { btn.textContent = "Join"; btn.disabled = false; }
             });
@@ -379,7 +373,8 @@ const mp = {
         } else if (data.type === 'AUTH_ACCEPTED') {
             if (btn) { btn.textContent = "Join"; btn.disabled = false; }
 
-            document.getElementById('lobby-room-id').textContent = data.roomId;
+            // O Erro também estava aqui na visão do Client!
+            document.getElementById('lobby-info-id').textContent = data.roomId;
             document.getElementById('lobby-info-max').textContent = data.maxPlayers;
             document.getElementById('lobby-info-pwd-wrap').style.display = data.isPrivate ? 'block' : 'none';
             document.getElementById('lobby-info-pwd').textContent = data.password;
@@ -870,4 +865,4 @@ const playUI = {
             document.querySelectorAll('.cell.view').forEach(cell => cell.classList.remove('view'));
         }
     }
-}
+};
