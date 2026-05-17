@@ -40,6 +40,9 @@
             <div class="container-center">
                 <h2>Join a Room</h2>
                 <div class="form-group" style="text-align: center; margin-bottom: 10px;">
+                    <input type="text" id="join-player-name" placeholder="Your Name" style="text-align: center; font-size: 14px;">
+                </div>
+                <div class="form-group" style="text-align: center; margin-bottom: 10px;">
                     <input type="text" id="join-room-id" placeholder="Room ID (Ex: ABX9)" style="text-align: center; text-transform: uppercase; font-size: 16px; letter-spacing: 3px;">
                 </div>
                 <div class="form-group" style="text-align: center; margin-bottom: 20px;">
@@ -53,38 +56,36 @@
         </div>
 
         <div id="mp-create-frame" class="frame">
-            <div class="sidebar">
-                <h2>Host Setup</h2>
-                <div class="form-group">
+            <div class="container-center" style="max-width: 300px;">
+                <h2>Host Room Setup</h2>
+
+                <div class="form-group" style="text-align: center; width: 100%;">
+                    <label>Your Name</label>
+                    <input type="text" id="mp-host-name" value="Host" style="text-align: center;">
+                </div>
+
+                <div class="form-group" style="text-align: center; width: 100%;">
                     <label>Room Visibility</label>
-                    <select id="mp-room-type" onchange="mpCreateUI.togglePassword()" style="width: 100%; padding: 8px; background: var(--entry-bg); color: var(--fg-text); border: none; font-size: 11px; outline: none;">
+                    <select id="mp-room-type" onchange="mpCreateUI.togglePassword()" style="width: 100%; padding: 8px; background: var(--entry-bg); color: var(--fg-text); border: none; font-size: 11px; outline: none; text-align: center;">
                         <option value="public">Public (No Password)</option>
                         <option value="private">Private (Requires Password)</option>
                     </select>
                 </div>
-                <div class="form-group" id="mp-password-group" style="display: none;">
+
+                <div class="form-group" id="mp-password-group" style="display: none; text-align: center; width: 100%;">
                     <label>Password</label>
-                    <input type="text" id="mp-room-pwd" placeholder="Create a password">
+                    <input type="text" id="mp-room-pwd" placeholder="Create a password" style="text-align: center;">
                 </div>
-                <div class="form-group">
-                    <label>Grid Size</label>
-                    <input type="number" id="mp-create-size" value="12" min="5" max="30">
+
+                <div class="form-group" style="text-align: center; width: 100%;">
+                    <label>Max Players (2 - 10)</label>
+                    <input type="number" id="mp-max-players" value="4" min="2" max="10" style="text-align: center;">
                 </div>
-                <div class="form-group">
-                    <label>Add Word</label>
-                    <div class="input-row">
-                        <input type="text" id="mp-create-word" placeholder="Type a word">
-                        <button class="btn-primary" onclick="mpCreateUI.addWord()">Add</button>
-                    </div>
+
+                <div class="action-row" style="width: 100%;">
+                    <button class="btn-secondary btn-fixed" onclick="app.switchFrame('mp-menu-frame')">Back</button>
+                    <button class="btn-success btn-fixed" onclick="mpCreateUI.generateAndHost()" style="width: 160px;">Open Lobby</button>
                 </div>
-                <div class="bottom-actions">
-                    <button class="btn-success btn-large" onclick="mpCreateUI.generateAndHost()">Create & Go to Lobby</button>
-                    <button class="btn-secondary" onclick="app.switchFrame('mp-menu-frame')">Back</button>
-                </div>
-            </div>
-            <div class="main-area">
-                <h2>Words to hide:</h2>
-                <ul id="mp-create-word-list" class="listbox"></ul>
             </div>
         </div>
 
@@ -134,23 +135,47 @@
         </div>
 
         <div id="lobby-frame" class="frame">
-            <div class="container-center">
-                <h2>Room ID: <span id="lobby-room-id" style="color: var(--cell-sel);"></span></h2>
-                <p class="subtitle" style="margin-bottom: 20px;">Waiting for players...</p>
-                <div class="select-container">
+            <div class="sidebar">
+                <h2>Room Info</h2>
+                <div style="background: var(--entry-bg); padding: 10px; margin-bottom: 20px; font-size: 12px; color: var(--fg-subtext);">
+                    <p>ID: <strong id="lobby-info-id" style="color: var(--cell-sel); font-size: 14px; letter-spacing: 2px;"></strong></p>
+                    <p id="lobby-info-pwd-wrap">Password: <strong id="lobby-info-pwd" style="color: var(--fg-text);"></strong></p>
+                    <p>Players: <strong id="lobby-info-count" style="color: var(--fg-text);"></strong> / <strong id="lobby-info-max"></strong></p>
+                </div>
 
-                    <div class="form-group" style="text-align: center; margin-bottom: 15px;">
-                        <input type="text" id="lobby-player-name" placeholder="Change your name" style="width: 60%; display: inline-block; font-size: 12px; text-align: center;">
-                        <button class="btn-primary" onclick="mp.updateName()" style="width: 30%; display: inline-block; padding: 8px;">Update</button>
+                <h2>Game Settings</h2>
+                <div id="host-settings" style="display: none;">
+                    <div class="form-group">
+                        <label>Grid Size</label>
+                        <input type="number" id="lobby-grid-size" value="12" min="5" max="30" onchange="mp.syncLobbySettings()">
                     </div>
-
-                    <ul id="lobby-players-list" class="listbox no-bg" style="font-size: 14px;"></ul>
-                    <div class="action-row">
-                        <button class="btn-secondary btn-fixed" onclick="mp.leaveRoom()">Leave</button>
-                        <div class="right-actions">
-                            <button id="btn-start-mp" class="btn-success btn-fixed" onclick="mp.startGameHost()" style="display:none; width: 140px;">Start Game</button>
+                    <div class="form-group">
+                        <label>Add Word</label>
+                        <div class="input-row">
+                            <input type="text" id="lobby-new-word" placeholder="Type a word">
+                            <button class="btn-primary" onclick="mp.addLobbyWord()">Add</button>
                         </div>
                     </div>
+                </div>
+                <div id="client-settings" style="display: none; background: var(--entry-bg); padding: 10px; font-size: 12px; color: var(--fg-subtext);">
+                    <p>Grid Size: <strong id="lobby-view-size" style="color: var(--fg-text);">12</strong></p>
+                    <p style="margin-top: 5px; font-style: italic;">Waiting for host to setup words...</p>
+                </div>
+
+                <div class="bottom-actions">
+                    <button id="btn-start-mp" class="btn-success btn-large" style="display:none;" onclick="mp.startGameHost()">Start Game</button>
+                    <button class="btn-secondary" onclick="mp.leaveRoom()">Leave Room</button>
+                </div>
+            </div>
+
+            <div class="main-area" style="display: flex; gap: 20px;">
+                <div style="flex: 1; display: flex; flex-direction: column;">
+                    <h2>Players</h2>
+                    <ul id="lobby-players-list" class="listbox no-bg" style="font-size: 14px; background: var(--entry-bg);"></ul>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column;">
+                    <h2>Words to hide</h2>
+                    <ul id="lobby-words-list" class="listbox"></ul>
                 </div>
             </div>
         </div>

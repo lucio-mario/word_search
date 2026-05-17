@@ -127,12 +127,16 @@ const mp = {
     myId: null,
     isPrivate: false,
     password: '',
-    myCurrentName: '',
+    maxPlayers: 4,
+
+    // Configurações do Lobby Compartilhado
+    lobbyWords: [],
+    lobbyGridSize: 12,
 
     // Host state
     connections: [],
     players: {},
-    cellColors: {}, // Guarda as cores das células encontradas para enviar para Late Joiners
+    cellColors: {},
 
     // Client state
     hostConn: null,
@@ -144,7 +148,8 @@ const mp = {
         mp.hostConn = null;
         mp.players = {};
         mp.cellColors = {};
-        mp.myCurrentName = '';
+        mp.lobbyWords = [];
+        mp.lobbyGridSize = 12;
     },
 
     leaveRoom: () => {
@@ -153,72 +158,74 @@ const mp = {
         app.switchFrame('mp-menu-frame');
     },
 
-    updateName: () => {
-        const newName = document.getElementById('lobby-player-name').value.trim();
-        if (!newName) return;
-        mp.myCurrentName = newName;
-
-        if (mp.isHost) {
-            mp.players[mp.myId].name = newName;
-            mp.broadcast({ type: 'LOBBY_UPDATE', players: mp.players });
-            mp.updateLobbyUI();
-        } else {
-            mp.hostConn.send({ type: 'UPDATE_NAME', name: newName });
-        }
-    },
-
     endGameHost: () => {
         if (!mp.isHost) return;
-        if (confirm("Are you sure you want to end the game for everyone?")) {
+        if (confirm("End the match and return everyone to the lobby?")) {
+            app.isMultiplayer = false;
             mp.broadcast({ type: 'GAME_OVER' });
-            alert("You ended the game.");
-            playUI.exitGame();
+            app.switchFrame('lobby-frame');
+            mp.updateLobbyUI();
         }
     },
 
-    createRoomHost: (gameData) => {
+    createRoomHost: (hostName, isPrivate, password, maxPlayers) => {
         mp.cleanup();
         mp.isHost = true;
+        mp.isPrivate = isPrivate;
+        mp.password = password;
+        mp.maxPlayers = maxPlayers;
         mp.roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
 
         mp.peer = new Peer(`ws-game-${mp.roomId}`);
 
         mp.peer.on('open', (id) => {
             mp.myId = id;
-            mp.players[id] = { name: 'Host (You)', color: PLAYER_COLORS[0], score: 0 };
-
-            document.getElementById('lobby-player-name').value = 'Host (You)';
-            mp.myCurrentName = 'Host (You)';
+            mp.players[id] = { name: hostName, color: PLAYER_COLORS[0], score: 0 };
 
             document.getElementById('lobby-room-id').textContent = mp.roomId;
+            document.getElementById('lobby-info-max').textContent = mp.maxPlayers;
+
+            document.getElementById('lobby-info-pwd-wrap').style.display = mp.isPrivate ? 'block' : 'none';
+            document.getElementById('lobby-info-pwd').textContent = mp.password;
+
             document.getElementById('btn-start-mp').style.display = 'block';
+            document.getElementById('host-settings').style.display = 'block';
+            document.getElementById('client-settings').style.display = 'none';
+
             app.switchFrame('lobby-frame');
             mp.updateLobbyUI();
-
-            mp.pendingGameData = gameData;
         });
 
         mp.peer.on('connection', (conn) => {
             conn.on('open', () => {
+                // Checagem de Lotação
+                if (Object.keys(mp.players).length >= mp.maxPlayers) {
+                    conn.send({ type: 'AUTH_REJECTED', reason: 'Room is full!' });
+                    setTimeout(() => conn.close(), 500);
+                    return;
+                }
+
+                // Checagem de Senha
                 if (mp.isPrivate) {
                     if (!conn.metadata || conn.metadata.password !== mp.password) {
-                        conn.send({ type: 'AUTH_REJECTED' });
+                        conn.send({ type: 'AUTH_REJECTED', reason: 'Incorrect Password!' });
                         setTimeout(() => conn.close(), 500);
                         return;
                     }
                 }
 
+                // Aceito
                 mp.connections.push(conn);
-                conn.send({ type: 'AUTH_ACCEPTED' });
+                conn.send({ type: 'AUTH_ACCEPTED', roomId: mp.roomId, maxPlayers: mp.maxPlayers, isPrivate: mp.isPrivate, password: mp.password });
 
                 const pCount = Object.keys(mp.players).length;
                 const color = PLAYER_COLORS[pCount % PLAYER_COLORS.length];
-                mp.players[conn.peer] = { name: `Player ${pCount + 1}`, color: color, score: 0 };
+                const pName = conn.metadata?.playerName || `Player ${pCount + 1}`;
+                mp.players[conn.peer] = { name: pName, color: color, score: 0 };
 
-                mp.broadcast({ type: 'LOBBY_UPDATE', players: mp.players });
-                mp.updateLobbyUI();
+                mp.syncLobbySettings(); // Envia as configurações atuais e a lista de jogadores
 
-                // LATE JOIN: Se o jogo já começou, manda os dados completos só para o novato
+                // LATE JOIN: O jogo já está rolando
                 if (app.isMultiplayer) {
                     conn.send({
                         type: 'GAME_START',
@@ -237,17 +244,18 @@ const mp = {
             conn.on('close', () => {
                 mp.connections = mp.connections.filter(c => c.peer !== conn.peer);
                 if(mp.players[conn.peer]) {
-                    mp.players[conn.peer].name += " (Disconnected)";
-                    mp.broadcast({ type: 'LOBBY_UPDATE', players: mp.players });
-                    mp.updateLobbyUI();
+                    delete mp.players[conn.peer]; // Remove jogador da lista
+                    mp.syncLobbySettings();
                 }
             });
         });
     },
 
     joinRoom: () => {
+        const inputName = document.getElementById('join-player-name').value.trim() || "Guest";
         const inputId = document.getElementById('join-room-id').value.trim().toUpperCase();
         const pwd = document.getElementById('join-room-pwd').value.trim();
+
         if (!inputId) return alert("Enter a Room ID");
 
         mp.cleanup();
@@ -257,7 +265,7 @@ const mp = {
         mp.peer = new Peer();
         mp.peer.on('open', (id) => {
             mp.myId = id;
-            mp.hostConn = mp.peer.connect(`ws-game-${mp.roomId}`, { metadata: { password: pwd } });
+            mp.hostConn = mp.peer.connect(`ws-game-${mp.roomId}`, { metadata: { password: pwd, playerName: inputName } });
 
             mp.hostConn.on('data', (data) => mp.handleDataFromHost(data));
             mp.hostConn.on('close', () => {
@@ -272,15 +280,59 @@ const mp = {
         });
     },
 
+    // --- Controles de Lobby do Host ---
+    addLobbyWord: () => {
+        const input = document.getElementById('lobby-new-word');
+        const word = input.value.trim().toUpperCase();
+        const size = parseInt(document.getElementById('lobby-grid-size').value);
+        if (!word) return;
+        if (word.length > size) return alert(`Word too long for grid size ${size}.`);
+
+        if (!mp.lobbyWords.includes(word)) {
+            mp.lobbyWords.push(word);
+            input.value = '';
+            mp.syncLobbySettings();
+        }
+    },
+
+    removeLobbyWord: (index) => {
+        mp.lobbyWords.splice(index, 1);
+        mp.syncLobbySettings();
+    },
+
+    syncLobbySettings: () => {
+        if (!mp.isHost) return;
+        mp.lobbyGridSize = parseInt(document.getElementById('lobby-grid-size').value) || 12;
+
+        const payload = {
+            type: 'LOBBY_UPDATE',
+            players: mp.players,
+            settings: { size: mp.lobbyGridSize, words: mp.lobbyWords }
+        };
+        mp.broadcast(payload);
+        mp.updateLobbyUI(); // Atualiza a tela do próprio Host
+    },
+    // ----------------------------------
+
     broadcast: (data) => {
         mp.connections.forEach(conn => conn.send(data));
     },
 
     startGameHost: () => {
-        if(!mp.pendingGameData) return;
+        if(mp.lobbyWords.length === 0) return alert("Add at least one word to start!");
+
+        const ws = new WordSearchGenerator(mp.lobbyGridSize);
+        const wordsPlaced = [];
+        mp.lobbyWords.forEach(word => { if (ws.addWord(word)) wordsPlaced.push(word); });
+
+        if (!wordsPlaced.length) return alert("Grid is too small to place any words!");
+        ws.fillRandomLetters();
+
+        mp.pendingGameData = { size: mp.lobbyGridSize, grid: ws.grid, words: wordsPlaced };
+
         app.isMultiplayer = true;
         Object.keys(mp.players).forEach(id => mp.players[id].score = 0);
-        mp.cellColors = {}; // Reinicia o tracker de cores do grid
+        mp.cellColors = {};
 
         mp.broadcast({ type: 'GAME_START', gameData: mp.pendingGameData, players: mp.players });
         playUI.loadGame("Multiplayer Match", mp.pendingGameData, true);
@@ -288,14 +340,7 @@ const mp = {
     },
 
     handleDataFromClient: (data, senderId) => {
-        if (data.type === 'UPDATE_NAME') {
-            if (mp.players[senderId]) {
-                mp.players[senderId].name = data.name;
-                mp.broadcast({ type: 'LOBBY_UPDATE', players: mp.players });
-                mp.updateLobbyUI();
-            }
-        }
-        else if (data.type === 'WORD_FOUND_REQ') {
+        if (data.type === 'WORD_FOUND_REQ') {
             if (playUI.wordsToFind.includes(data.word)) {
                 mp.players[senderId].score += 1;
                 mp.broadcast({ type: 'WORD_FOUND_ACK', word: data.word, coords: data.coords, playerId: senderId, players: mp.players });
@@ -306,28 +351,30 @@ const mp = {
 
     handleDataFromHost: (data) => {
         if (data.type === 'AUTH_REJECTED') {
-            alert("Incorrect Password or Room is Private!");
+            alert(data.reason);
             mp.leaveRoom();
         } else if (data.type === 'AUTH_ACCEPTED') {
-            document.getElementById('lobby-room-id').textContent = mp.roomId;
+            document.getElementById('lobby-room-id').textContent = data.roomId;
+            document.getElementById('lobby-info-max').textContent = data.maxPlayers;
+            document.getElementById('lobby-info-pwd-wrap').style.display = data.isPrivate ? 'block' : 'none';
+            document.getElementById('lobby-info-pwd').textContent = data.password;
+
             document.getElementById('btn-start-mp').style.display = 'none';
+            document.getElementById('host-settings').style.display = 'none';
+            document.getElementById('client-settings').style.display = 'block';
             app.switchFrame('lobby-frame');
+
         } else if (data.type === 'LOBBY_UPDATE') {
             mp.players = data.players;
+            mp.lobbyGridSize = data.settings.size;
+            mp.lobbyWords = data.settings.words;
             mp.updateLobbyUI();
 
-            // Popula o input com o nome gerado pelo Host na primeira vez
-            const serverName = mp.players[mp.myId]?.name;
-            if (serverName && mp.myCurrentName !== serverName) {
-                document.getElementById('lobby-player-name').value = serverName;
-                mp.myCurrentName = serverName;
-            }
         } else if (data.type === 'GAME_START') {
             app.isMultiplayer = true;
             mp.players = data.players;
             playUI.loadGame("Multiplayer Match", data.gameData, true);
 
-            // Se for Late Join, aplica a fotografia do estado atual da partida
             if (data.syncState) {
                 playUI.wordsToFind = data.syncState.wordsToFind;
                 playUI.updateWordList();
@@ -341,18 +388,23 @@ const mp = {
                     }
                 });
             }
-
             app.switchFrame('play-frame');
+
         } else if (data.type === 'WORD_FOUND_ACK') {
             mp.players = data.players;
             playUI.applyRemoteFoundWord(data.word, data.coords, data.playerId);
+
         } else if (data.type === 'GAME_OVER') {
-            alert("The Host ended the game.");
-            playUI.exitGame();
+            app.isMultiplayer = false;
+            app.switchFrame('lobby-frame');
+            mp.updateLobbyUI();
         }
     },
 
     updateLobbyUI: () => {
+        // Atualiza Infos de Jogadores
+        document.getElementById('lobby-info-count').textContent = Object.keys(mp.players).length;
+
         const list = document.getElementById('lobby-players-list');
         list.innerHTML = '';
         Object.values(mp.players).forEach(p => {
@@ -361,6 +413,32 @@ const mp = {
             list.appendChild(li);
         });
 
+        // Atualiza a lista de Palavras no Lobby
+        const wordList = document.getElementById('lobby-words-list');
+        wordList.innerHTML = '';
+        mp.lobbyWords.forEach((word, index) => {
+            const li = document.createElement('li');
+            li.textContent = "  " + word;
+
+            // O Host vê o botão de deletar palavras
+            if (mp.isHost) {
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'X';
+                delBtn.style.float = 'right';
+                delBtn.style.padding = '2px 6px';
+                delBtn.style.background = 'var(--btn-danger)';
+                delBtn.onclick = () => mp.removeLobbyWord(index);
+                li.appendChild(delBtn);
+            }
+            wordList.appendChild(li);
+        });
+
+        // Atualiza UI específica do Client (ver tamanho da grade)
+        if (!mp.isHost) {
+            document.getElementById('lobby-view-size').textContent = mp.lobbyGridSize;
+        }
+
+        // Atualiza o Scoreboard (se estiver no meio de um jogo)
         if (app.isMultiplayer) {
             const sbList = document.getElementById('scoreboard-list');
             sbList.innerHTML = '';
@@ -375,7 +453,6 @@ const mp = {
         }
     }
 };
-
 
 // --- Singleplayer Create Logic ---
 const createUI = {
@@ -422,60 +499,34 @@ const createUI = {
     }
 };
 
-// --- Multiplayer Create Logic ---
+// --- Multiplayer Create Settings ---
 const mpCreateUI = {
-    words: [],
     reset: () => {
-        mpCreateUI.words = [];
-        document.getElementById('mp-create-size').value = '12';
-        document.getElementById('mp-create-word').value = '';
-        document.getElementById('mp-create-word-list').innerHTML = '';
+        document.getElementById('mp-host-name').value = 'Host';
         document.getElementById('mp-room-type').value = 'public';
         document.getElementById('mp-room-pwd').value = '';
+        document.getElementById('mp-max-players').value = '4';
         mpCreateUI.togglePassword();
     },
     togglePassword: () => {
         const type = document.getElementById('mp-room-type').value;
         document.getElementById('mp-password-group').style.display = type === 'private' ? 'block' : 'none';
     },
-    addWord: () => {
-        const input = document.getElementById('mp-create-word');
-        const word = input.value.trim().toUpperCase();
-        const size = parseInt(document.getElementById('mp-create-size').value);
-        if (!word || isNaN(size) || size <= 0) return;
-        if (word.length > size) return alert(`Word too long.`);
-        if (!mpCreateUI.words.includes(word)) {
-            mpCreateUI.words.push(word);
-            const li = document.createElement('li');
-            li.textContent = "  " + word;
-            document.getElementById('mp-create-word-list').appendChild(li);
-            input.value = '';
-        }
-    },
     generateAndHost: () => {
-        const size = parseInt(document.getElementById('mp-create-size').value);
-        if (!mpCreateUI.words.length) return alert("Please add words.");
-
+        const hName = document.getElementById('mp-host-name').value.trim() || 'Host';
         const isPrivate = document.getElementById('mp-room-type').value === 'private';
         const password = document.getElementById('mp-room-pwd').value.trim();
+        const maxPlayers = parseInt(document.getElementById('mp-max-players').value) || 4;
 
         if (isPrivate && !password) return alert("Please enter a password for the private room.");
 
-        const ws = new WordSearchGenerator(size);
-        const wordsPlaced = [];
-        mpCreateUI.words.forEach(word => { if (ws.addWord(word)) wordsPlaced.push(word); });
-
-        if (!wordsPlaced.length) return alert("Could not place any words.");
-        ws.fillRandomLetters();
-
-        mp.isPrivate = isPrivate;
-        mp.password = password;
-        mp.createRoomHost({ size: size, grid: ws.grid, words: wordsPlaced });
+        // Vai para o Lobby limpo
+        mp.createRoomHost(hName, isPrivate, password, maxPlayers);
     }
 };
 
 document.getElementById('create-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') createUI.addWord(); });
-document.getElementById('mp-create-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') mpCreateUI.addWord(); });
+document.getElementById('lobby-new-word').addEventListener('keypress', (e) => { if (e.key === 'Enter') mp.addLobbyWord(); });
 
 // --- Select Game Logic (Singleplayer) ---
 const selectUI = {
@@ -730,7 +781,6 @@ const playUI = {
             highlightColor = mp.players[playerId].color;
         }
 
-        // Se for o Host, guarda a cor que foi pintada para sincronizar depois com quem entrar atrasado
         if (app.isMultiplayer && mp.isHost) {
             coords.forEach(coord => mp.cellColors[coord] = highlightColor);
         }
