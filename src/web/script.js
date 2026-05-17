@@ -168,8 +168,9 @@ const mp = {
         }
     },
 
-    // A função principal de criar a sala, agora sem receber dados do gerador
     createRoomHost: (hostName, isPrivate, password, maxPlayers) => {
+        const btn = document.querySelector('#mp-create-frame .btn-success');
+
         mp.cleanup();
         mp.isHost = true;
         mp.isPrivate = isPrivate;
@@ -177,13 +178,20 @@ const mp = {
         mp.maxPlayers = maxPlayers;
         mp.roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
 
-        mp.peer = new Peer(`ws-game-${mp.roomId}`);
+        try {
+            // Usa ID em minúsculo na rede para evitar bugs no servidor do PeerJS
+            mp.peer = new Peer(`ws-game-${mp.roomId.toLowerCase()}`);
+        } catch (e) {
+            if (btn) { btn.textContent = "Open Lobby"; btn.disabled = false; }
+            return alert("Failed to initialize networking: " + e.message);
+        }
 
         mp.peer.on('open', (id) => {
+            if (btn) { btn.textContent = "Open Lobby"; btn.disabled = false; }
             mp.myId = id;
             mp.players[id] = { name: hostName, color: PLAYER_COLORS[0], score: 0 };
 
-            document.getElementById('lobby-room-id').textContent = mp.roomId;
+            document.getElementById('lobby-room-id').textContent = mp.roomId; // Exibe Maiúsculo
             document.getElementById('lobby-info-max').textContent = mp.maxPlayers;
 
             document.getElementById('lobby-info-pwd-wrap').style.display = mp.isPrivate ? 'block' : 'none';
@@ -197,16 +205,20 @@ const mp = {
             mp.updateLobbyUI();
         });
 
+        mp.peer.on('error', (err) => {
+            if (btn) { btn.textContent = "Open Lobby"; btn.disabled = false; }
+            alert("Network Error: " + err.type);
+            mp.leaveRoom();
+        });
+
         mp.peer.on('connection', (conn) => {
             conn.on('open', () => {
-                // Checagem de Lotação
                 if (Object.keys(mp.players).length >= mp.maxPlayers) {
                     conn.send({ type: 'AUTH_REJECTED', reason: 'Room is full!' });
                     setTimeout(() => conn.close(), 500);
                     return;
                 }
 
-                // Checagem de Senha
                 if (mp.isPrivate) {
                     if (!conn.metadata || conn.metadata.password !== mp.password) {
                         conn.send({ type: 'AUTH_REJECTED', reason: 'Incorrect Password!' });
@@ -215,7 +227,6 @@ const mp = {
                     }
                 }
 
-                // Aceito
                 mp.connections.push(conn);
                 conn.send({ type: 'AUTH_ACCEPTED', roomId: mp.roomId, maxPlayers: mp.maxPlayers, isPrivate: mp.isPrivate, password: mp.password });
 
@@ -226,7 +237,6 @@ const mp = {
 
                 mp.syncLobbySettings();
 
-                // LATE JOIN
                 if (app.isMultiplayer) {
                     conn.send({
                         type: 'GAME_START',
@@ -253,11 +263,15 @@ const mp = {
     },
 
     joinRoom: () => {
+        const btn = document.querySelector('#mp-join-frame .btn-success');
         const inputName = document.getElementById('join-player-name').value.trim() || "Guest";
         const inputId = document.getElementById('join-room-id').value.trim().toUpperCase();
         const pwd = document.getElementById('join-room-pwd').value.trim();
 
         if (!inputId) return alert("Enter a Room ID");
+        if (typeof Peer === 'undefined') return alert("WebRTC library failed to load.");
+
+        if (btn) { btn.textContent = "Joining..."; btn.disabled = true; }
 
         mp.cleanup();
         mp.isHost = false;
@@ -266,16 +280,23 @@ const mp = {
         mp.peer = new Peer();
         mp.peer.on('open', (id) => {
             mp.myId = id;
-            mp.hostConn = mp.peer.connect(`ws-game-${mp.roomId}`, { metadata: { password: pwd, playerName: inputName } });
+            // Conecta usando o ID em minúsculo
+            mp.hostConn = mp.peer.connect(`ws-game-${mp.roomId.toLowerCase()}`, { metadata: { password: pwd, playerName: inputName } });
 
             mp.hostConn.on('data', (data) => mp.handleDataFromHost(data));
             mp.hostConn.on('close', () => {
                 alert("Disconnected from Host.");
                 mp.leaveRoom();
             });
+
+            // Restaura o botão caso a conexão com o host demore/falhe e dispare erro
+            mp.hostConn.on('error', () => {
+                if (btn) { btn.textContent = "Join"; btn.disabled = false; }
+            });
         });
 
         mp.peer.on('error', (err) => {
+            if (btn) { btn.textContent = "Join"; btn.disabled = false; }
             alert(`Connection error: ${err.type}`);
             mp.leaveRoom();
         });
@@ -349,10 +370,15 @@ const mp = {
     },
 
     handleDataFromHost: (data) => {
+        const btn = document.querySelector('#mp-join-frame .btn-success');
+
         if (data.type === 'AUTH_REJECTED') {
+            if (btn) { btn.textContent = "Join"; btn.disabled = false; }
             alert(data.reason);
             mp.leaveRoom();
         } else if (data.type === 'AUTH_ACCEPTED') {
+            if (btn) { btn.textContent = "Join"; btn.disabled = false; }
+
             document.getElementById('lobby-room-id').textContent = data.roomId;
             document.getElementById('lobby-info-max').textContent = data.maxPlayers;
             document.getElementById('lobby-info-pwd-wrap').style.display = data.isPrivate ? 'block' : 'none';
@@ -500,14 +526,22 @@ const mpCreateUI = {
         document.getElementById('mp-room-type').value = 'public';
         document.getElementById('mp-room-pwd').value = '';
         document.getElementById('mp-max-players').value = '4';
+
+        const btn = document.querySelector('#mp-create-frame .btn-success');
+        if (btn) { btn.textContent = "Open Lobby"; btn.disabled = false; }
+
         mpCreateUI.togglePassword();
     },
     togglePassword: () => {
         const type = document.getElementById('mp-room-type').value;
         document.getElementById('mp-password-group').style.display = type === 'private' ? 'block' : 'none';
     },
-    // Removidas as funções de addWord daqui
     generateAndHost: () => {
+        if (typeof Peer === 'undefined') {
+            return alert("WebRTC (PeerJS) is not loaded. Please check your internet connection or disable adblockers.");
+        }
+
+        const btn = document.querySelector('#mp-create-frame .btn-success');
         const hName = document.getElementById('mp-host-name').value.trim() || 'Host';
         const isPrivate = document.getElementById('mp-room-type').value === 'private';
         const password = document.getElementById('mp-room-pwd').value.trim();
@@ -515,7 +549,7 @@ const mpCreateUI = {
 
         if (isPrivate && !password) return alert("Please enter a password for the private room.");
 
-        // Abre o lobby direto, sem precisar processar o grid agora
+        if (btn) { btn.textContent = "Connecting..."; btn.disabled = true; }
         mp.createRoomHost(hName, isPrivate, password, maxPlayers);
     }
 };
@@ -836,4 +870,4 @@ const playUI = {
             document.querySelectorAll('.cell.view').forEach(cell => cell.classList.remove('view'));
         }
     }
-};
+}
