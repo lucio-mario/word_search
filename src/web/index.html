@@ -14,7 +14,7 @@
                 <h1>Word Search</h1>
                 <button class="btn-primary btn-large" onclick="app.switchFrame('sp-menu-frame')">Singleplayer</button>
                 <button class="btn-hint btn-large" onclick="app.switchFrame('mp-menu-frame')">Multiplayer</button>
-                <button class="btn-secondary btn-large" onclick="app.exitApp()">Exit Game</button>
+                <button class="btn-secondary btn-large" onclick="app.exitApp()">Close Window</button>
             </div>
         </div>
 
@@ -170,8 +170,13 @@
 
             <div class="main-area" style="display: flex; gap: 20px;">
                 <div style="flex: 1; display: flex; flex-direction: column;">
-                    <h2>Players</h2>
+                    <h2>Players (★ Wins)</h2>
                     <ul id="lobby-players-list" class="listbox no-bg" style="font-size: 14px; background: var(--entry-bg);"></ul>
+
+                    <div class="form-group" style="text-align: center; margin-top: 15px;">
+                        <input type="text" id="lobby-player-name" placeholder="Change your name" style="width: 60%; display: inline-block; font-size: 12px; text-align: center;">
+                        <button class="btn-primary" onclick="mp.updateName()" style="width: 30%; display: inline-block; padding: 8px;">Update</button>
+                    </div>
                 </div>
                 <div style="flex: 1; display: flex; flex-direction: column;">
                     <h2>Words to hide</h2>
@@ -199,9 +204,10 @@
 
                 <div class="bottom-actions">
                     <p class="hint-text">Click and drag to select</p>
-                    <button id="btn-end-mp" class="btn-danger" onclick="mp.endGameHost()" style="display:none; width: 100%; margin-bottom: 10px; padding: 10px;">End Game (Host)</button>
+                    <button id="btn-end-mp" class="btn-danger" onclick="mp.endGameHost()" style="display:none; width: 100%; margin-bottom: 10px; padding: 10px;">End Game (Return to Lobby)</button>
 
-                    <button class="btn-secondary" onclick="playUI.exitGame()">Exit Game</button>
+                    <button id="btn-leave-mp" class="btn-secondary" onclick="mp.leaveRoom()" style="display:none; width: 100%; margin-bottom: 10px; padding: 10px;">Leave Room</button>
+                    <button class="btn-secondary" onclick="app.exitApp()">Close Window</button>
                 </div>
             </div>
             <div class="main-area flex-center">

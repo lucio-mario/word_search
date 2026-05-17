@@ -110,9 +110,11 @@ const app = {
         if (frameId === 'mp-create-frame') mpCreateUI.reset();
     },
     exitApp: () => {
-        if (confirm("Are you sure you want to exit the game?")) {
+        if (confirm("Close the browser window?")) {
+            // Se for fechar a aba, já faz o leaveRoom para limpar o peerjs server
+            if (app.isMultiplayer) mp.leaveRoom();
             window.close();
-            document.getElementById('app').innerHTML = '<div class="container-center"><h1>Thanks for playing!</h1><p class="subtitle">You can close this tab now.</p></div>';
+            document.getElementById('app').innerHTML = '<div class="container-center"><h1>Game Closed</h1><p class="subtitle">You can close this tab now.</p></div>';
         }
     }
 };
@@ -128,6 +130,7 @@ const mp = {
     isPrivate: false,
     password: '',
     maxPlayers: 4,
+    myCurrentName: '',
 
     lobbyWords: [],
     lobbyGridSize: 12,
@@ -136,6 +139,9 @@ const mp = {
     players: {},
     cellColors: {},
     hostConn: null,
+
+    // Lista ordenada de IDs para decidir quem é o próximo host
+    peerOrder: [],
 
     cleanup: () => {
         if (mp.peer) mp.peer.destroy();
@@ -146,6 +152,7 @@ const mp = {
         mp.cellColors = {};
         mp.lobbyWords = [];
         mp.lobbyGridSize = 12;
+        mp.peerOrder = [];
     },
 
     leaveRoom: () => {
@@ -154,16 +161,47 @@ const mp = {
         app.switchFrame('mp-menu-frame');
     },
 
-    endGameHost: () => {
-        if (!mp.isHost) return;
-        if (confirm("End the match and return everyone to the lobby?")) {
-            app.isMultiplayer = false;
-            mp.broadcast({ type: 'GAME_OVER' });
-            app.switchFrame('lobby-frame');
+    updateName: () => {
+        const newName = document.getElementById('lobby-player-name').value.trim();
+        if (!newName) return;
+        mp.myCurrentName = newName;
+
+        if (mp.isHost) {
+            mp.players[mp.myId].name = newName;
+            mp.broadcast({ type: 'LOBBY_UPDATE', players: mp.players, settings: { size: mp.lobbyGridSize, words: mp.lobbyWords }, peerOrder: mp.peerOrder });
             mp.updateLobbyUI();
+        } else {
+            mp.hostConn.send({ type: 'UPDATE_NAME', name: newName });
         }
     },
 
+    // Finaliza a partida e distribui os pontos de vitória (Wins)
+    endGameHost: () => {
+        if (!mp.isHost) return;
+        if (confirm("End the match and return everyone to the lobby?")) {
+            mp.calculateAndBroadcastWins();
+        }
+    },
+
+    calculateAndBroadcastWins: () => {
+        let maxScore = -1;
+        Object.values(mp.players).forEach(p => { if (p.score > maxScore) maxScore = p.score; });
+
+        if (maxScore > 0) {
+            Object.keys(mp.players).forEach(id => {
+                if (mp.players[id].score === maxScore) {
+                    mp.players[id].wins = (mp.players[id].wins || 0) + 1;
+                }
+            });
+        }
+
+        app.isMultiplayer = false;
+        mp.broadcast({ type: 'GAME_OVER', players: mp.players });
+        app.switchFrame('lobby-frame');
+        mp.updateLobbyUI();
+    },
+
+    // O Host original cria a sala do zero
     createRoomHost: (hostName, isPrivate, password, maxPlayers) => {
         const btn = document.querySelector('#mp-create-frame .btn-success');
 
@@ -184,12 +222,11 @@ const mp = {
         mp.peer.on('open', (id) => {
             if (btn) { btn.textContent = "Open Lobby"; btn.disabled = false; }
             mp.myId = id;
-            mp.players[id] = { name: hostName, color: PLAYER_COLORS[0], score: 0 };
+            mp.players[id] = { name: hostName, color: PLAYER_COLORS[0], score: 0, wins: 0 };
+            mp.peerOrder = [id];
 
-            // O Erro estava aqui! Corrigido para lobby-info-id
             document.getElementById('lobby-info-id').textContent = mp.roomId;
             document.getElementById('lobby-info-max').textContent = mp.maxPlayers;
-
             document.getElementById('lobby-info-pwd-wrap').style.display = mp.isPrivate ? 'block' : 'none';
             document.getElementById('lobby-info-pwd').textContent = mp.password;
 
@@ -207,94 +244,188 @@ const mp = {
             mp.leaveRoom();
         });
 
-        mp.peer.on('connection', (conn) => {
-            conn.on('open', () => {
-                if (Object.keys(mp.players).length >= mp.maxPlayers) {
-                    conn.send({ type: 'AUTH_REJECTED', reason: 'Room is full!' });
+        mp.peer.on('connection', (conn) => mp.setupHostConnection(conn));
+    },
+
+    // A lógica de gerenciar uma nova conexão com o Host
+    setupHostConnection: (conn) => {
+        conn.on('open', () => {
+            if (Object.keys(mp.players).length >= mp.maxPlayers) {
+                conn.send({ type: 'AUTH_REJECTED', reason: 'Room is full!' });
+                setTimeout(() => conn.close(), 500);
+                return;
+            }
+
+            if (mp.isPrivate) {
+                if (!conn.metadata || conn.metadata.password !== mp.password) {
+                    conn.send({ type: 'AUTH_REJECTED', reason: 'Incorrect Password!' });
                     setTimeout(() => conn.close(), 500);
                     return;
                 }
+            }
 
-                if (mp.isPrivate) {
-                    if (!conn.metadata || conn.metadata.password !== mp.password) {
-                        conn.send({ type: 'AUTH_REJECTED', reason: 'Incorrect Password!' });
-                        setTimeout(() => conn.close(), 500);
-                        return;
-                    }
-                }
+            // Client Aceito. Adiciona à lista de Herança de Host
+            mp.connections.push(conn);
+            mp.peerOrder.push(conn.peer);
 
-                mp.connections.push(conn);
-                conn.send({ type: 'AUTH_ACCEPTED', roomId: mp.roomId, maxPlayers: mp.maxPlayers, isPrivate: mp.isPrivate, password: mp.password });
+            // Resgata vitórias passadas do jogador se ele for novo na sala (sempre 0 ao entrar)
+            const pCount = Object.keys(mp.players).length;
+            const color = PLAYER_COLORS[pCount % PLAYER_COLORS.length];
+            const pName = conn.metadata?.playerName || `Player ${pCount + 1}`;
 
-                const pCount = Object.keys(mp.players).length;
-                const color = PLAYER_COLORS[pCount % PLAYER_COLORS.length];
-                const pName = conn.metadata?.playerName || `Player ${pCount + 1}`;
-                mp.players[conn.peer] = { name: pName, color: color, score: 0 };
+            // Se o client reconectou (Migração), nós preservamos o "wins" que ele mandou. Senão, 0.
+            const pWins = conn.metadata?.wins || 0;
 
+            mp.players[conn.peer] = { name: pName, color: color, score: 0, wins: pWins };
+
+            conn.send({ type: 'AUTH_ACCEPTED', roomId: mp.roomId, maxPlayers: mp.maxPlayers, isPrivate: mp.isPrivate, password: mp.password });
+            mp.syncLobbySettings();
+
+            if (app.isMultiplayer) {
+                conn.send({
+                    type: 'GAME_START',
+                    gameData: mp.pendingGameData,
+                    players: mp.players,
+                    syncState: { wordsToFind: playUI.wordsToFind, cellColors: mp.cellColors }
+                });
+            }
+        });
+
+        conn.on('data', (data) => mp.handleDataFromClient(data, conn.peer));
+
+        conn.on('close', () => {
+            mp.connections = mp.connections.filter(c => c.peer !== conn.peer);
+            mp.peerOrder = mp.peerOrder.filter(id => id !== conn.peer);
+            if(mp.players[conn.peer]) {
+                delete mp.players[conn.peer];
                 mp.syncLobbySettings();
-
-                if (app.isMultiplayer) {
-                    conn.send({
-                        type: 'GAME_START',
-                        gameData: mp.pendingGameData,
-                        players: mp.players,
-                        syncState: {
-                            wordsToFind: playUI.wordsToFind,
-                            cellColors: mp.cellColors
-                        }
-                    });
-                }
-            });
-
-            conn.on('data', (data) => mp.handleDataFromClient(data, conn.peer));
-
-            conn.on('close', () => {
-                mp.connections = mp.connections.filter(c => c.peer !== conn.peer);
-                if(mp.players[conn.peer]) {
-                    delete mp.players[conn.peer];
-                    mp.syncLobbySettings();
-                }
-            });
+            }
         });
     },
 
-    joinRoom: () => {
+    joinRoom: (forcedRoomId = null, forcedPwd = null, silent = false, previousWins = 0) => {
         const btn = document.querySelector('#mp-join-frame .btn-success');
         const inputName = document.getElementById('join-player-name').value.trim() || "Guest";
-        const inputId = document.getElementById('join-room-id').value.trim().toUpperCase();
-        const pwd = document.getElementById('join-room-pwd').value.trim();
+
+        const inputId = forcedRoomId || document.getElementById('join-room-id').value.trim().toUpperCase();
+        const pwd = forcedPwd !== null ? forcedPwd : document.getElementById('join-room-pwd').value.trim();
 
         if (!inputId) return alert("Enter a Room ID");
-        if (typeof Peer === 'undefined') return alert("WebRTC library failed to load.");
+        if (!silent && typeof Peer === 'undefined') return alert("WebRTC library failed to load.");
 
-        if (btn) { btn.textContent = "Joining..."; btn.disabled = true; }
+        if (btn && !silent) { btn.textContent = "Joining..."; btn.disabled = true; }
 
         mp.cleanup();
         mp.isHost = false;
         mp.roomId = inputId;
+        mp.myCurrentName = inputName;
 
         mp.peer = new Peer();
         mp.peer.on('open', (id) => {
             mp.myId = id;
-            mp.hostConn = mp.peer.connect(`ws-game-${mp.roomId.toLowerCase()}`, { metadata: { password: pwd, playerName: inputName } });
+            // O Client envia seu nome e quantas vitórias já tinha (importante para Migração)
+            mp.hostConn = mp.peer.connect(`ws-game-${mp.roomId.toLowerCase()}`, {
+                metadata: { password: pwd, playerName: mp.myCurrentName, wins: previousWins }
+            });
 
             mp.hostConn.on('data', (data) => mp.handleDataFromHost(data));
+
             mp.hostConn.on('close', () => {
-                alert("Disconnected from Host.");
-                mp.leaveRoom();
+                if (mp.peerOrder.length > 1) {
+                    mp.handleHostMigration(); // Tenta migrar o Host se ele cair
+                } else {
+                    alert("Disconnected from Host.");
+                    mp.leaveRoom();
+                }
             });
 
             mp.hostConn.on('error', () => {
-                if (btn) { btn.textContent = "Join"; btn.disabled = false; }
+                if (btn && !silent) { btn.textContent = "Join"; btn.disabled = false; }
             });
         });
 
         mp.peer.on('error', (err) => {
-            if (btn) { btn.textContent = "Join"; btn.disabled = false; }
+            if (btn && !silent) { btn.textContent = "Join"; btn.disabled = false; }
             alert(`Connection error: ${err.type}`);
             mp.leaveRoom();
         });
     },
+
+    // --- LÓGICA DE MIGRAÇÃO DE HOST ---
+    handleHostMigration: () => {
+        // Remove o Host antigo (que estava no index 0)
+        mp.peerOrder.shift();
+        const newHostId = mp.peerOrder[0];
+
+        // Se EU for o próximo da fila, assumo o papel do Host
+        if (mp.myId === newHostId) {
+
+            // Salva o estado atual da sala
+            const savedState = {
+                roomId: mp.roomId,
+                isPriv: mp.isPrivate,
+                pwd: mp.password,
+                max: mp.maxPlayers,
+                words: mp.lobbyWords,
+                size: mp.lobbyGridSize,
+                myName: mp.myCurrentName,
+                myWins: mp.players[mp.myId]?.wins || 0
+            };
+
+            mp.cleanup();
+
+            // Aguarda 1.5s para o servidor do PeerJS liberar a tag da sala antiga
+            setTimeout(() => {
+                mp.isHost = true;
+                mp.isPrivate = savedState.isPriv;
+                mp.password = savedState.pwd;
+                mp.maxPlayers = savedState.max;
+                mp.roomId = savedState.roomId;
+                mp.lobbyWords = savedState.words;
+                mp.lobbyGridSize = savedState.size;
+
+                mp.peer = new Peer(`ws-game-${mp.roomId.toLowerCase()}`);
+
+                mp.peer.on('open', (id) => {
+                    mp.myId = id;
+                    // Eu me adiciono como Host mantendo minhas vitórias
+                    mp.players[id] = { name: savedState.myName + ' (New Host)', color: PLAYER_COLORS[0], score: 0, wins: savedState.myWins };
+                    mp.peerOrder = [id];
+
+                    document.getElementById('lobby-info-id').textContent = mp.roomId;
+                    document.getElementById('lobby-info-max').textContent = mp.maxPlayers;
+                    document.getElementById('lobby-info-pwd-wrap').style.display = mp.isPrivate ? 'block' : 'none';
+                    document.getElementById('lobby-info-pwd').textContent = mp.password;
+
+                    document.getElementById('btn-start-mp').style.display = 'block';
+                    document.getElementById('host-settings').style.display = 'block';
+                    document.getElementById('client-settings').style.display = 'none';
+
+                    app.isMultiplayer = false; // Força voltar ao lobby
+                    app.switchFrame('lobby-frame');
+                    mp.updateLobbyUI();
+                    alert("The previous host left. YOU are the new Host!");
+                });
+
+                mp.peer.on('connection', (conn) => mp.setupHostConnection(conn));
+
+            }, 1500);
+
+        } else {
+            // Se eu NÃO sou o próximo, aguardo 3 segundos e tento reconectar na mesma sala silenciosamente
+            const rId = mp.roomId;
+            const rPwd = mp.password;
+            const myWins = mp.players[mp.myId]?.wins || 0;
+
+            mp.cleanup();
+            document.getElementById('lobby-players-list').innerHTML = "<li style='color: var(--btn-warn);'>Host left. Reconnecting to new Host...</li>";
+
+            setTimeout(() => {
+                mp.joinRoom(rId, rPwd, true, myWins);
+            }, 3000);
+        }
+    },
+    // ------------------------------------
 
     addLobbyWord: () => {
         const input = document.getElementById('lobby-new-word');
@@ -322,6 +453,7 @@ const mp = {
         const payload = {
             type: 'LOBBY_UPDATE',
             players: mp.players,
+            peerOrder: mp.peerOrder,
             settings: { size: mp.lobbyGridSize, words: mp.lobbyWords }
         };
         mp.broadcast(payload);
@@ -354,7 +486,13 @@ const mp = {
     },
 
     handleDataFromClient: (data, senderId) => {
-        if (data.type === 'WORD_FOUND_REQ') {
+        if (data.type === 'UPDATE_NAME') {
+            if (mp.players[senderId]) {
+                mp.players[senderId].name = data.name;
+                mp.syncLobbySettings();
+            }
+        }
+        else if (data.type === 'WORD_FOUND_REQ') {
             if (playUI.wordsToFind.includes(data.word)) {
                 mp.players[senderId].score += 1;
                 mp.broadcast({ type: 'WORD_FOUND_ACK', word: data.word, coords: data.coords, playerId: senderId, players: mp.players });
@@ -373,7 +511,10 @@ const mp = {
         } else if (data.type === 'AUTH_ACCEPTED') {
             if (btn) { btn.textContent = "Join"; btn.disabled = false; }
 
-            // O Erro também estava aqui na visão do Client!
+            mp.isPrivate = data.isPrivate;
+            mp.password = data.password;
+            mp.maxPlayers = data.maxPlayers;
+
             document.getElementById('lobby-info-id').textContent = data.roomId;
             document.getElementById('lobby-info-max').textContent = data.maxPlayers;
             document.getElementById('lobby-info-pwd-wrap').style.display = data.isPrivate ? 'block' : 'none';
@@ -382,10 +523,15 @@ const mp = {
             document.getElementById('btn-start-mp').style.display = 'none';
             document.getElementById('host-settings').style.display = 'none';
             document.getElementById('client-settings').style.display = 'block';
+
+            // Popula o nome que a pessoa digitou na tela de Join
+            document.getElementById('lobby-player-name').value = mp.myCurrentName;
+
             app.switchFrame('lobby-frame');
 
         } else if (data.type === 'LOBBY_UPDATE') {
             mp.players = data.players;
+            mp.peerOrder = data.peerOrder;
             mp.lobbyGridSize = data.settings.size;
             mp.lobbyWords = data.settings.words;
             mp.updateLobbyUI();
@@ -416,6 +562,7 @@ const mp = {
 
         } else if (data.type === 'GAME_OVER') {
             app.isMultiplayer = false;
+            mp.players = data.players; // Atualiza com os wins calculados pelo host
             app.switchFrame('lobby-frame');
             mp.updateLobbyUI();
         }
@@ -428,7 +575,7 @@ const mp = {
         list.innerHTML = '';
         Object.values(mp.players).forEach(p => {
             const li = document.createElement('li');
-            li.innerHTML = `<span class="player-dot" style="background-color: ${p.color};"></span> ${p.name}`;
+            li.innerHTML = `<span class="player-dot" style="background-color: ${p.color};"></span> ${p.name} <strong style="float:right; color:var(--cell-sel);">★ ${p.wins || 0}</strong>`;
             list.appendChild(li);
         });
 
@@ -614,11 +761,13 @@ const playUI = {
             document.getElementById('sp-actions').style.display = 'none';
             document.getElementById('scoreboard-container').style.display = 'block';
             document.getElementById('btn-end-mp').style.display = mp.isHost ? 'block' : 'none';
+            document.getElementById('btn-leave-mp').style.display = 'block';
             mp.updateLobbyUI();
         } else {
             document.getElementById('sp-actions').style.display = 'block';
             document.getElementById('scoreboard-container').style.display = 'none';
             document.getElementById('btn-end-mp').style.display = 'none';
+            document.getElementById('btn-leave-mp').style.display = 'none';
         }
 
         playUI.wordCoordsMap = playUI._mapAllWords();
@@ -819,13 +968,12 @@ const playUI = {
 
         if (playUI.wordsToFind.length === 0) {
             setTimeout(() => {
-                if (app.isMultiplayer) {
-                    const sorted = Object.values(mp.players).sort((a,b) => b.score - a.score);
-                    alert(`Game Over! ${sorted[0].name} wins with ${sorted[0].score} points!`);
-                } else {
+                if (app.isMultiplayer && mp.isHost) {
+                    mp.calculateAndBroadcastWins();
+                } else if (!app.isMultiplayer) {
                     alert("Congratulations! You found all the words!");
                 }
-            }, 100);
+            }, 1000); // 1 segundo de folga para os jogadores verem a última palavra
         }
     },
 
